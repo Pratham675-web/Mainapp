@@ -290,18 +290,21 @@
             .wallet-coin { padding: 5px 10px; }
             .wallet-coin img { width: 20px; height: 20px; }
             .coin-text { font-size: 12px; }
-            /* ── Dashboard home grid: force 3 columns ── */
-            .dashboard-container { padding: 14px; }
-            .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
-            .stat-card { padding: 14px 8px; border-radius: 16px; }
-            .btn-image { width: 52px; height: 52px; margin-bottom: 8px; }
-            .stat-card h4 { font-size: 12px; margin-bottom: 4px; line-height: 1.3; }
-            .stat-card p { font-size: 10px; color: #666; }
+            /* ── Dashboard home grid: force 4 columns ── */
+            .dashboard-container { padding: 10px; }
+            .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+            .stat-card { padding: 10px 5px; border-radius: 14px; }
+            .btn-image { width: 44px; height: 44px; margin-bottom: 6px; }
+            .stat-card h4 { font-size: 10px; margin-bottom: 0; line-height: 1.3; }
+            .stat-card p { display: none; }
             /* ── Inner pages: constrain width so inner tables can scroll ── */
             .inner-container { padding: 10px; max-width: 100%; box-sizing: border-box; }
-            .form-card { padding: 14px; border-radius: 20px; overflow-x: hidden; max-width: 100%; box-sizing: border-box; }
-            .two-column-layout { flex-direction: column !important; }
-            .image-column { display: none; }
+            .form-card { padding: 12px; border-radius: 18px; overflow-x: hidden; max-width: 100%; box-sizing: border-box; }
+            /* ── Two-column layout: keep horizontal, shrink image column ── */
+            .two-column-layout { flex-direction: row !important; align-items: flex-start !important; gap: 10px !important; flex-wrap: nowrap !important; }
+            .image-column { display: flex !important; flex-direction: column; align-items: center; min-width: 72px !important; max-width: 80px !important; flex-shrink: 0; }
+            .image-column .big-logo { width: 68px !important; height: 68px !important; object-fit: contain; }
+            .form-column { flex: 1 !important; min-width: 0 !important; overflow: hidden; }
             .form-row { grid-template-columns: 1fr; }
             /* ── Plans page ── */
             .plans-layout { flex-direction: column; align-items: center; }
@@ -321,9 +324,15 @@
             .calculation-box { overflow-x: auto; }
             .calculation-row { font-size: 13px; flex-wrap: wrap; gap: 6px; }
             .calculation-box input[type="number"] { width: 90px !important; }
-            /* ── Admission type buttons: stack vertically ── */
-            .admission-type-buttons { flex-direction: column; gap: 12px; padding: 0 10px; }
-            .admission-type-btn { width: 100%; padding: 12px 20px; font-size: 15px; text-align: center; }
+            /* ── Admission type buttons: stay horizontal on mobile, smaller ── */
+            .admission-type-buttons { flex-wrap: wrap; gap: 8px; padding: 0 6px; margin: 16px 0; justify-content: center; }
+            .admission-type-btn { padding: 10px 14px; font-size: 13px; text-align: center; flex: 1 1 auto; min-width: 90px; max-width: 160px; border-radius: 40px; }
+            /* ── Approval / detail page ── */
+            .approval-detail-grid { grid-template-columns: 1fr !important; }
+            /* ── Fees page calculation box ── */
+            .calculation-box .calculation-row { font-size: 12px; }
+            /* ── Two-column form: show compact on mobile ── */
+            .form-column { min-width: 0 !important; width: 100%; }
             /* ── Student / teacher cards ── */
             .student-card { flex-direction: column; align-items: flex-start; gap: 10px; }
             .student-info { flex-direction: column; gap: 5px; align-items: flex-start; }
@@ -586,6 +595,11 @@
             billingSaved      = fsGet(fsData, 'billingSaved',       'eRegister_billing_saved',      {});
             coAdmins          = fsGet(fsData, 'coAdmins',           null,                           []);
             if(!Array.isArray(coAdmins)) coAdmins = [];
+            selectedWallpaper = fsGet(fsData, 'selectedWallpaper', 'eRegister_wallpaper', '');
+            quickPayments     = fsGet(fsData, 'quickPayments',     'eRegister_quick_payments', []);
+            if(!Array.isArray(quickPayments)) quickPayments = [];
+            let seqRaw = fsData && fsData['admissionSeqNumber'] ? fsData['admissionSeqNumber'] : (localStorage.getItem('eRegister_admission_seq') || '0');
+            window._admissionSeqNumber = parseInt(seqRaw) || 0;
 
             defaultItemsList.forEach(item => { if(itemsFees[item] === undefined) itemsFees[item] = 0; });
 
@@ -882,12 +896,23 @@
             deleteIconBig: 'https://i.ibb.co/Zpc17jfF/delete-icon.png',
             printIconBig: 'https://i.ibb.co/8gM85QCv/print-icon.png',
             plansIcon: 'https://i.ibb.co/Q7JF3JFx/wallet-3d-icon-png-download-10033542.png',
-            qrPayment: 'https://i.ibb.co/0R0pCDfY/Screenshot-20260612-173931-Phone-Pe.png'
+            qrPayment: 'https://i.ibb.co/0R0pCDfY/Screenshot-20260612-173931-Phone-Pe.png',
+            doubleProfile: 'https://i.ibb.co/jkr6hrzk',
+            settingIcon: 'https://i.ibb.co/placeholder/setting-icon.png',
+            quickPaymentLogo: 'https://i.ibb.co/Xxs1vm44/quick-payment.png',
+            studentListIcon: 'https://i.ibb.co/QFCD3wXz/student-list.png',
+            dayBookIcon: 'https://i.ibb.co/cjstsGK/day-book.png',
+            inventoryIcon: 'https://i.ibb.co/ns3MRVpj/inventory.png',
+            dayBookIconFallback: 'https://i.ibb.co/1GW7dt67/calendar-logo.png',
+            inventoryIconFallback: 'https://i.ibb.co/fGGtKhLf/calculate-icon.png',
+            quickPaymentIconFallback: 'https://i.ibb.co/ZRc66PpP/3d-wallet-icon-blue-purse-with-golden-coin.png'
         };
 
         let familyStudents = [{ id: 1, name: '', class: '', aadhar: '' }];
         let familyDetailsData = {};
         let singleStep1Data = {};
+        let selectedWallpaper = '';
+        let quickPayments = [];
         // Free students: { studentId: { everything, tuitionFree, examFree, additionalFree } }
         // freeStudentsList declared above (near classList)
         function saveFreeStudents() { fsSave('freeStudentsList', freeStudentsList); localStorage.setItem('eRegister_free_students', JSON.stringify(freeStudentsList)); }
@@ -1128,7 +1153,7 @@
             if(showBack) {
                 leftSection = `<div class="menu-left"><button class="back-btn" onclick="goBack()"><img src="${img.backIcon}" style="width:20px"> Back</button></div>`;
             } else {
-                leftSection = `<div class="menu-left"><div class="menu-item"><i class="fas fa-file-alt"></i> File<div class="dropdown"><a onclick="navigateTo(renderSetProperty)"><i class="fas fa-sliders-h"></i> Set Property</a><a onclick="navigateTo(renderFeesSetting)"><i class="fas fa-rupee-sign"></i> Fees Setting</a><a onclick="navigateTo(renderAdmissionSettings)"><i class="fas fa-tshirt"></i> Dress Setting</a><a onclick="navigateTo(renderFeesStructure)"><i class="fas fa-cog"></i> Fees Structure</a><a onclick="navigateTo(renderAccessibility)"><i class="fas fa-universal-access"></i> Accessibility</a><a onclick="navigateTo(renderBackupPage)"><i class="fas fa-database"></i> Backup</a><a onclick="navigateTo(renderPrintSettings)"><i class="fas fa-print"></i> Print Setting</a></div></div><div class="menu-item"><i class="fas fa-cogs"></i> Operation<div class="dropdown"><a onclick="navigateTo(renderStudentList)"><i class="fas fa-user-graduate"></i> Student</a><a onclick="navigateTo(renderTeacherList)"><i class="fas fa-chalkboard-user"></i> Teacher</a><a onclick="navigateTo(renderResultClassList)"><i class="fas fa-chart-line"></i> Result</a><a onclick="navigateTo(renderPlans)"><i class="fas fa-crown"></i> Plans</a></div></div></div>`;
+                leftSection = `<div class="menu-left"><div class="menu-item"><i class="fas fa-file-alt"></i> File<div class="dropdown"><a onclick="navigateTo(renderSetProperty)"><i class="fas fa-sliders-h"></i> Set Property</a><a onclick="navigateTo(renderFeesSetting)"><i class="fas fa-rupee-sign"></i> Fees Setting</a><a onclick="navigateTo(renderAdmissionSettings)"><i class="fas fa-tshirt"></i> Dress Setting</a><a onclick="navigateTo(renderFeesStructure)"><i class="fas fa-cog"></i> Fees Structure</a><a onclick="navigateTo(renderAccessibility)"><i class="fas fa-universal-access"></i> Accessibility</a><a onclick="navigateTo(renderBackupPage)"><i class="fas fa-database"></i> Backup</a><a onclick="navigateTo(renderPrintSettings)"><i class="fas fa-print"></i> Print Setting</a><a onclick="navigateTo(renderWallpaperSetting)"><i class="fas fa-image"></i> Setting</a></div></div><div class="menu-item"><i class="fas fa-cogs"></i> Operation<div class="dropdown"><a onclick="navigateTo(renderQuickPayment)"><i class="fas fa-bolt"></i> Quick Payment</a><a onclick="navigateTo(renderStudentList)"><i class="fas fa-user-graduate"></i> Student</a><a onclick="navigateTo(renderTeacherList)"><i class="fas fa-chalkboard-user"></i> Teacher</a><a onclick="navigateTo(renderResultClassList)"><i class="fas fa-chart-line"></i> Result</a><a onclick="navigateTo(renderPlans)"><i class="fas fa-crown"></i> Plans</a></div></div></div>`;
             }
             return `<div class="dashboard-header"><h3><i class="fas fa-book-open"></i> e-Register</h3><div class="header-right"><span><i class="fas fa-user-circle"></i> ${currentUser?.name||''} (${currentUser?.designation||''})</span><button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button></div></div><div class="menu-bar">${leftSection}<div class="menu-right"><div class="wallet-coin"><img src="${img.walletCoin}"><span class="coin-text"><i class="fas fa-coins"></i> ${getCurrentCoins()} Coin</span></div><div class="notification-icon" onclick="togglePanel()"><i class="fas fa-bell"></i><span id="notificationBadge" class="notification-badge"></span></div></div></div>`;
         }
@@ -1475,7 +1500,12 @@
             currentPageArgs = [];
             pageHistory = [];
             document.getElementById('appBody').style.background = 'none'; 
-            document.getElementById('app').innerHTML = `<div class="home-bg"><div class="sticky-header">${getHeader('Home', false)}</div><div class="dashboard-container"><div class="stats-grid"><div class="stat-card" onclick="navigateTo(renderStudentAttendance)"><img class="btn-image" src="${img.studentAttendance}"><h4>Student Attendance</h4><p>Mark & view attendance</p></div><div class="stat-card" onclick="navigateTo(renderTeacherAttendanceDashboard)"><img class="btn-image" src="${img.teacherAttendance}"><h4>Teacher Attendance</h4><p>Mark & view attendance</p></div><div class="stat-card" onclick="navigateTo(renderSearchPage)"><img class="btn-image" src="${img.fees}"><h4>Search / Fees</h4><p>Search students & fees</p></div><div class="stat-card" onclick="navigateTo(renderApproval)"><img class="btn-image" src="${img.approval}"><h4>Approval</h4><p>Approve pending admissions</p></div><div class="stat-card" onclick="navigateTo(renderAdmissionType)"><img class="btn-image" src="${img.newAdmission}"><h4>New Admission</h4><p>Register new students</p></div><div class="stat-card" onclick="navigateTo(renderBackupPage)"><img class="btn-image" src="${img.database}"><h4>Backup</h4><p>Export data to Excel</p></div></div><div class="user-info"><i class="fas fa-info-circle" style="color:#667eea;font-size:24px;"></i><p>Welcome <strong>${currentUser.name}</strong>!<br>Logged in as <strong>${currentUser.designation}</strong><br><small>Code: ${currentUser.code}</small></p></div></div>${getOverlay()}</div>`;
+            document.getElementById('app').innerHTML = `<div class="home-bg"><div class="sticky-header">${getHeader('Home', false)}</div><div class="dashboard-container"><div class="stats-grid"><div class="stat-card" onclick="navigateTo(renderStudentAttendance)"><img class="btn-image" src="${img.studentAttendance}"><h4>Student Attendance</h4><p>Mark & view</p></div><div class="stat-card" onclick="navigateTo(renderTeacherAttendanceDashboard)"><img class="btn-image" src="${img.teacherAttendance}"><h4>Teacher Attendance</h4><p>Mark & view</p></div><div class="stat-card" onclick="navigateTo(renderSearchPage)"><img class="btn-image" src="${img.fees}"><h4>Search / Fees</h4><p>Students & fees</p></div><div class="stat-card" onclick="navigateTo(renderApproval)"><img class="btn-image" src="${img.approval}"><h4>Approval</h4><p>Approve admissions</p></div><div class="stat-card" onclick="navigateTo(renderAdmissionType)"><img class="btn-image" src="${img.newAdmission}"><h4>New Admission</h4><p>Register students</p></div><div class="stat-card" onclick="navigateTo(renderDefaulterList)"><img class="btn-image" src="https://i.ibb.co/V0J59wCm/defaulter-icon.png" onerror="this.src='${img.studentListIcon}'"><h4>Defaulter List</h4><p>Fee defaulters</p></div><div class="stat-card" onclick="navigateTo(renderDayBook)"><img class="btn-image" src="${img.dayBookIcon}" onerror="this.src='${img.dayBookIconFallback}'"><h4>Day Book</h4><p>Income & expense</p></div><div class="stat-card" onclick="navigateTo(renderInventory)"><img class="btn-image" src="${img.inventoryIcon}" onerror="this.src='${img.inventoryIconFallback}'"><h4>Inventory</h4><p>Manage items</p></div></div><div class="user-info"><i class="fas fa-info-circle" style="color:#667eea;font-size:24px;"></i><p>Welcome <strong>${currentUser.name}</strong>!<br>Logged in as <strong>${currentUser.designation}</strong><br><small>Code: ${currentUser.code}</small></p></div></div>${getOverlay()}</div>`;
+            // Apply wallpaper if set
+            if(selectedWallpaper) {
+                let hbEl = document.querySelector('.home-bg');
+                if(hbEl) hbEl.style.backgroundImage = `url('${selectedWallpaper}')`;
+            }
             // If coins are 0, show expired overlay (covers both trial expired and admin-set-0)
             if(getCurrentCoins() <= 0) {
                 setTimeout(() => showExpiredOverlay(), 300);
@@ -2014,7 +2044,14 @@
             let isYellow = (m) => m.isFree === true;
             let primaryMember = familyMembers.find(m => !isYellow(m)) || familyMembers[0];
             let primaryHistory = paymentHistory[primaryMember?.id] || [];
-            let lastBalance = primaryHistory.length > 0 ? primaryHistory[primaryHistory.length - 1].balance : 0;
+            let lastBalance = 0;
+            if(primaryHistory.length > 0) {
+                lastBalance = primaryHistory[primaryHistory.length - 1].balance || 0;
+            } else {
+                // Fallback: check admission record's oldBalance
+                let admForBalance = admissions.find(a => a.status === 'approved' && (String(a.id) === String(primaryMember?.admissionId) || (a.type==='single' && String(a.id) === String(primaryMember?.admissionId))));
+                if(admForBalance) lastBalance = parseFloat(admForBalance.oldBalance || 0);
+            }
 
             historyHtml += `<div class="family-history-card"><div class="family-members-list">`;
             familyMembers.forEach(member => {
@@ -2419,9 +2456,12 @@
                         <td><input type="number" min="0" placeholder="0" id="itemVal_${item.replace(/\s/g,'_')}" 
                             style="width:140px; padding:8px; border:1px solid #e0e0e0; border-radius:8px;" 
                             value="${dispVal}" onchange="updateItemFee('${item}', this.value)"></td>
-                        <td style="text-align:center;">
+                        <td style="text-align:center;white-space:nowrap;">
                             <button onclick="startEditItem('${item}')" title="Edit item name" style="background:none;border:none;cursor:pointer;padding:2px;">
                                 <img src="https://i.ibb.co/ymMx1nhZ/edit-icon.png" style="width:34px;height:34px;">
+                            </button>
+                            <button onclick="deleteItemFee('${item}')" title="Delete item" style="background:none;border:none;cursor:pointer;padding:2px;">
+                                <img src="https://i.ibb.co/Zpc17jfF/delete-icon.png" style="width:34px;height:34px;">
                             </button>
                         </td>
                     </tr>`;
@@ -2521,12 +2561,13 @@
                 if(!nameCell) return;
                 let currentName = nameCell.innerText;
                 nameCell.innerHTML = `<input type="text" id="editItemInput_${key}" value="${currentName}" 
-                    style="width:100%; padding:6px; border:2px solid #667eea; border-radius:8px; font-size:14px;">`;
-                // Replace edit btn with save btn
-                let actionCell = nameCell.nextElementSibling.nextElementSibling;
-                actionCell.innerHTML = `<button onclick="saveEditItem('${oldName}')" title="Save" style="background:none;border:none;cursor:pointer;padding:2px;">
-                    <img src="https://i.ibb.co/7NCYqxkC/pencil-icon.png" style="width:34px;height:34px;">
-                </button>`;
+                    style="width:100%; padding:6px; border:2px solid #667eea; border-radius:8px; font-size:14px;"
+                    onblur="saveEditItem('${oldName}')"
+                    onkeydown="if(event.key==='Enter'){this.blur();}">`;
+                setTimeout(() => {
+                    let inp = document.getElementById('editItemInput_' + key);
+                    if(inp) inp.focus();
+                }, 50);
             };
             
             window.saveEditItem = (oldName) => {
@@ -2535,15 +2576,23 @@
                 if(!input) return;
                 let newName = input.value.trim();
                 if(!newName) { showPopup('Item name empty hai!', false); return; }
-                // Update itemsFees with new key
                 let oldVal = itemsFees[oldName] || 0;
                 delete itemsFees[oldName];
                 itemsFees[newName] = oldVal;
-                // Update defaultItemsList
                 let idx2 = defaultItemsList.indexOf(oldName);
                 if(idx2 >= 0) defaultItemsList[idx2] = newName;
                 fsSave('itemsFees', itemsFees); localStorage.setItem('eRegister_items_fees', JSON.stringify(itemsFees));
-                showPopup('✅ Item name updated successfully!');
+                showPopup('✅ Item name updated!');
+                renderStructureTable();
+            };
+
+            window.deleteItemFee = (itemName) => {
+                if(!confirm('Delete "' + itemName + '" item? This cannot be undone.')) return;
+                delete itemsFees[itemName];
+                let idx3 = defaultItemsList.indexOf(itemName);
+                if(idx3 >= 0) defaultItemsList.splice(idx3, 1);
+                fsSave('itemsFees', itemsFees); localStorage.setItem('eRegister_items_fees', JSON.stringify(itemsFees));
+                showPopup('✅ Item deleted successfully!');
                 renderStructureTable();
             };
             
@@ -2930,7 +2979,7 @@
         }
         
         function performSearch() {
-            let query = document.getElementById('searchQuery').value.toLowerCase();
+            let query = document.getElementById('searchQuery').value.toLowerCase().trim();
             let filterClass = document.getElementById('filterClassHidden').value;
             let spinner = document.getElementById('searchSpinner');
             let resultsDiv = document.getElementById('searchResults');
@@ -2941,9 +2990,12 @@
             setTimeout(() => {
                 let students = getAllStudents();
                 let results = students.filter(s => {
-                    let matchesQuery = s.name.toLowerCase().includes(query) || 
+                    let admNum = String(s.id).toLowerCase();
+                    let matchesQuery = !query ||
+                                      s.name.toLowerCase().includes(query) || 
                                       s.contact.includes(query) || 
-                                      (s.familyName && s.familyName.toLowerCase().includes(query));
+                                      (s.familyName && s.familyName.toLowerCase().includes(query)) ||
+                                      admNum.includes(query);
                     let matchesClass = (filterClass === 'all' || s.className === filterClass);
                     return matchesQuery && matchesClass;
                 });
@@ -3128,9 +3180,28 @@
             // Always reload paymentHistory from localStorage for latest data
             /* paymentHistory already in memory */
             let primaryHistoryForBalance = paymentHistory[primaryMemberForBalance?.id] || [];
-            let oldBalanceAmount = primaryHistoryForBalance.length > 0 
-                ? (primaryHistoryForBalance[primaryHistoryForBalance.length - 1].balance || 0) 
-                : 0;
+            let oldBalanceAmount = 0;
+            if(primaryHistoryForBalance.length > 0) {
+                oldBalanceAmount = primaryHistoryForBalance[primaryHistoryForBalance.length - 1].balance || 0;
+            } else {
+                // Check admission old balance if no payment history
+                let admRec = admissions.find(a => {
+                    if(a.status === 'approved') {
+                        if(a.type === 'single' && String(a.id) === String(primaryMemberForBalance?.admissionId)) return true;
+                        if((a.type === 'family' || a.type === 'double') && a.students && a.students.some(s => String(a.id+'_'+s.id) === String(primaryMemberForBalance?.id) || String(a.id) === String(primaryMemberForBalance?.admissionId))) return true;
+                        if(String(a.id) === String(primaryMemberForBalance?.admissionId)) return true;
+                    }
+                    return false;
+                });
+                if(admRec) {
+                    if(admRec.type === 'family' || admRec.type === 'double') {
+                        let matchedStu = admRec.students && admRec.students.find(s => String(admRec.id+'_'+s.id) === String(primaryMemberForBalance?.id));
+                        oldBalanceAmount = parseFloat((matchedStu && matchedStu.oldBalance) || admRec.oldBalance || 0);
+                    } else {
+                        oldBalanceAmount = parseFloat(admRec.oldBalance || 0);
+                    }
+                }
+            }
             
             // Reset selected months to current month only
             selectedMonths = [new Date().getMonth()];
@@ -3227,6 +3298,41 @@
                 calculateTotal();
             };
             
+            window._discMode = 'rupee';
+            window._setDiscMode = function(mode) {
+                window._discMode = mode;
+                let pBtn = document.getElementById('discTogglePercent');
+                let rBtn = document.getElementById('discToggleRupee');
+                if(pBtn && rBtn) {
+                    if(mode === 'percent') {
+                        pBtn.style.background = '#667eea'; pBtn.style.color = 'white';
+                        rBtn.style.background = 'transparent'; rBtn.style.color = '#667eea';
+                    } else {
+                        rBtn.style.background = '#667eea'; rBtn.style.color = 'white';
+                        pBtn.style.background = 'transparent'; pBtn.style.color = '#667eea';
+                    }
+                }
+                calculateTotal();
+            };
+
+            window._updateMOP = function() {
+                let labels = ['mopCashLabel','mopPaytmLabel','mopBothLabel'];
+                let colors = ['#10b981','#00baf2','#f59e0b'];
+                labels.forEach((id, i) => {
+                    let el = document.getElementById(id);
+                    if(el) {
+                        let radio = el.querySelector('input[type="radio"]');
+                        if(radio && radio.checked) {
+                            el.style.borderColor = colors[i];
+                            el.style.background = colors[i] + '15';
+                        } else {
+                            el.style.borderColor = '#e0e0e0';
+                            el.style.background = 'white';
+                        }
+                    }
+                });
+            };
+
             window.calculateTotal = () => {
                 let grandTotal = 0;
                 let rowTotals = document.querySelectorAll('.row-total');
@@ -3235,7 +3341,8 @@
                 });
                 let oldBalance = parseFloat(document.getElementById('oldBalance').innerText) || 0;
                 let finalGrandTotal = grandTotal + oldBalance;
-                let discount = parseFloat(document.getElementById('discountAmount').value) || 0;
+                let discInput = parseFloat(document.getElementById('discountAmount').value) || 0;
+                let discount = (window._discMode === 'percent') ? Math.round(finalGrandTotal * discInput / 100) : discInput;
                 let submittedAmount = parseFloat(document.getElementById('submittedAmount').value) || 0;
                 let afterDiscount = finalGrandTotal - discount;
                 let balance = afterDiscount - submittedAmount;
@@ -3253,6 +3360,12 @@
                         balanceMsg.innerHTML = '';
                     }
                 }
+            };
+
+            window._getSelectedMOP = function() {
+                let radios = document.querySelectorAll('input[name="modeOfPayment"]');
+                for(let r of radios) { if(r.checked) return r.value; }
+                return '';
             };
             
             window.saveFeesData = () => {
@@ -3297,6 +3410,12 @@
                     let memberExamFee = getExamFeesForSelectedMonths(member.className, selectedMonths);
                     if(memberExamFee > 0) memberFees['Exam Fees'] = memberExamFee;
                     
+                    // Auto-generate receipt number: RCP-YYYYMMDD-XXXX
+                    let now2 = new Date();
+                    let yymmdd = now2.getFullYear().toString() + ('0'+(now2.getMonth()+1)).slice(-2) + ('0'+now2.getDate()).slice(-2);
+                    let recSeq = ((paymentHistory[member.id]||[]).length + 1).toString().padStart(4,'0');
+                    let receiptNo = 'RCP-' + yymmdd + '-' + recSeq;
+
                     let historyRecord = {
                         date: new Date().toLocaleString(),
                         months: selectedMonthNames,
@@ -3307,7 +3426,9 @@
                         oldBalance: oldBalanceAmount,
                         fees: memberFees,
                         examFees: memberExamFee,
-                        remark: remark
+                        remark: remark,
+                        modeOfPayment: window._getSelectedMOP ? window._getSelectedMOP() : '',
+                        receiptNo: receiptNo
                     };
                     if(!paymentHistory[member.id]) paymentHistory[member.id] = [];
                     paymentHistory[member.id].push(historyRecord);
@@ -3326,29 +3447,83 @@
                     <div class="action-icons-right">
                         <button class="calendar-icon" onclick="openMonthSelector()"><img src="${img.monthIcon}"></button>
                         <button class="calc-icon" onclick="calculateFeesFromStructure()"><img src="${img.calculateIcon}"></button>
+                        <button class="plus-icon-big" title="Add custom column" onclick="document.getElementById('customColModalFC').style.display='flex'"><img src="${img.plusIcon}"></button>
                         <button class="print-icon" onclick="printFeesCard()"><img src="${img.printIcon}"></button>
                         <button class="history-icon" onclick="navigateTo(renderHistoryPage, '${student.id}', '${student.name}')"><img src="${img.historyIcon}"></button>
                     </div>
                 </div>
                 <div id="selectedMonthsContainer" class="selected-months"></div>
                 <div id="feesTableContainer" style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;"></div>
+                <div id="customColModalFC" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1001;justify-content:center;align-items:center;">
+                    <div style="background:white;border-radius:20px;padding:26px;width:320px;max-width:90%;">
+                        <h3 style="margin-bottom:14px;"><i class="fas fa-plus-circle" style="color:#667eea;"></i> Add Custom Column</h3>
+                        <input type="text" id="customColNameFC" placeholder="Column name (e.g. Transport)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;margin-bottom:14px;">
+                        <div style="display:flex;gap:10px;justify-content:flex-end;">
+                            <button onclick="document.getElementById('customColModalFC').style.display='none'" style="padding:9px 18px;border:none;border-radius:12px;background:#e0e0e0;cursor:pointer;font-weight:600;">Cancel</button>
+                            <button onclick="window._addCustomColFC()" style="padding:9px 18px;border:none;border-radius:12px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;cursor:pointer;font-weight:600;">Add</button>
+                        </div>
+                    </div>
+                </div>
                 <div class="calculation-box">
                     <div class="calculation-row"><span style="color:#ef4444; font-weight:700;">Old Balance:</span><span id="oldBalance" class="old-balance-text">${oldBalanceAmount}</span></div>
                     <div class="calculation-row"><span>Grand Total (with Old Balance):</span><span id="grandTotal" class="total-text">0</span></div>
-                    <div class="calculation-row"><span>Discount:</span><input type="number" id="discountAmount" placeholder="0" style="width:120px;" oninput="calculateTotal()"></div>
+                    <div class="calculation-row">
+                        <span>Discount:
+                            <span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;background:#f0f0f0;border-radius:20px;padding:2px 6px;">
+                                <button id="discTogglePercent" onclick="window._setDiscMode('percent')"
+                                    style="padding:3px 10px;border-radius:15px;border:none;cursor:pointer;font-size:12px;font-weight:700;background:#667eea;color:white;">%</button>
+                                <button id="discToggleRupee" onclick="window._setDiscMode('rupee')"
+                                    style="padding:3px 10px;border-radius:15px;border:none;cursor:pointer;font-size:12px;font-weight:700;background:transparent;color:#667eea;">₹</button>
+                            </span>
+                        </span>
+                        <input type="number" id="discountAmount" placeholder="0" style="width:120px;" oninput="calculateTotal()">
+                    </div>
                     <div class="calculation-row"><span>After Discount:</span><span id="afterDiscount">0</span></div>
                     <div class="calculation-row"><span>Submitted Amount:</span><input type="number" id="submittedAmount" placeholder="0" style="width:120px;" oninput="calculateTotal()"></div>
                     <div class="calculation-row"><span>Balance:</span><span id="balanceAmount" class="balance-text">0</span><span id="balanceMessage"></span></div>
+                </div>
+                <div style="background:#f8f9ff;border-radius:16px;padding:16px;margin:12px 0;border:2px solid #e0e7ff;">
+                    <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-bottom:10px;"><i class="fas fa-credit-card" style="color:#667eea;"></i> Mode of Payment</div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                        <label style="display:flex;align-items:center;gap:7px;padding:9px 18px;border:2px solid #e0e0e0;border-radius:20px;cursor:pointer;background:white;font-size:13px;font-weight:600;transition:0.2s;" id="mopCashLabel">
+                            <input type="radio" name="modeOfPayment" value="Cash" id="mopCash" style="width:16px;height:16px;accent-color:#10b981;" onchange="window._updateMOP()">
+                            <i class="fas fa-money-bill-wave" style="color:#10b981;"></i> Cash
+                        </label>
+                        <label style="display:flex;align-items:center;gap:7px;padding:9px 18px;border:2px solid #e0e0e0;border-radius:20px;cursor:pointer;background:white;font-size:13px;font-weight:600;transition:0.2s;" id="mopPaytmLabel">
+                            <input type="radio" name="modeOfPayment" value="Paytm" id="mopPaytm" style="width:16px;height:16px;accent-color:#00baf2;" onchange="window._updateMOP()">
+                            <i class="fas fa-mobile-alt" style="color:#00baf2;"></i> Paytm / UPI
+                        </label>
+                        <label style="display:flex;align-items:center;gap:7px;padding:9px 18px;border:2px solid #e0e0e0;border-radius:20px;cursor:pointer;background:white;font-size:13px;font-weight:600;transition:0.2s;" id="mopBothLabel">
+                            <input type="radio" name="modeOfPayment" value="Cash & Paytm" id="mopBoth" style="width:16px;height:16px;accent-color:#f59e0b;" onchange="window._updateMOP()">
+                            <i class="fas fa-exchange-alt" style="color:#f59e0b;"></i> Cash & Paytm
+                        </label>
+                    </div>
                 </div>
                 <div class="input-group"><label><i class="fas fa-comment"></i> Remark</label><textarea id="remarkText" rows="2" placeholder="Enter remark here..."></textarea></div>
                 <button id="saveFeesBtn" class="btn btn-success" style="margin-top:20px; width:100%;" onclick="saveFeesData()"><i class="fas fa-save"></i> Save Fees <span id="saveSpinner" class="spinner" style="display:none; width:20px; height:20px;"></span></button>
                 </div></div></div>
                 <div id="monthModal" class="modal"><div class="modal-content"><h3>Select Months</h3><div id="monthModalContent" class="month-checkbox-group"></div><div class="modal-buttons"><button class="btn btn-secondary" onclick="document.getElementById('monthModal').style.display='none'">Cancel</button><button class="btn btn-primary" onclick="saveMonthSelection()">Apply</button></div></div></div>
                 ${getOverlay()}`;
+            // Custom column helper — adds a new column to the fees table
+            window._addCustomColFC = function() {
+                let inp = document.getElementById('customColNameFC');
+                if(!inp) return;
+                let colName = inp.value.trim();
+                if(!colName) { showPopup('Column name empty hai!', false); return; }
+                if(feesColumns.includes(colName)) { showPopup('Yeh column already exist karta hai!', false); return; }
+                feesColumns.push(colName);
+                fsSave('feesColumns', feesColumns); localStorage.setItem('eRegister_fees_columns', JSON.stringify(feesColumns));
+                document.getElementById('customColModalFC').style.display = 'none';
+                inp.value = '';
+                renderTable();
+                showPopup('✅ Column "' + colName + '" add ho gaya!');
+            };
+
             renderTable();
             renderSelectedMonths();
             calculateFeesFromStructure();
             calculateTotal();
+            window._discMode = 'rupee';
             window.saveFeesData = saveFeesData;
             window.updateRowTotal = updateRowTotal;
             window.calculateTotal = calculateTotal;
@@ -3452,6 +3627,77 @@
         }
 
         // ==================== STUDENT LIST (Operation -> Student) ====================
+        // ==================== DEFAULTER LIST ====================
+        function renderDefaulterList() {
+            let students = getAllStudents();
+            let periods = [
+                { label: 'This Month', months: 1 },
+                { label: 'Last 2 Months', months: 2 },
+                { label: 'Last 6 Months', months: 6 },
+                { label: 'Last 1 Year', months: 12 },
+                { label: 'Last 2 Years', months: 24 },
+                { label: 'Last 3 Years', months: 36 }
+            ];
+            let now = new Date();
+            let currentPeriodMonths = parseInt(localStorage.getItem('eRegister_defaulter_period') || '1');
+
+            function buildDefaulterList(periodMonths) {
+                localStorage.setItem('eRegister_defaulter_period', periodMonths);
+                let cutoff = new Date(now.getFullYear(), now.getMonth() - periodMonths + 1, 1);
+                // Group by class
+                let classMap = {};
+                students.forEach(s => {
+                    let hist = paymentHistory[s.id] || [];
+                    let paidInPeriod = hist.some(h => {
+                        let d = new Date(h.date);
+                        return d >= cutoff && (h.submittedAmount > 0 || h.amount > 0);
+                    });
+                    if(!paidInPeriod) {
+                        let cls = s.className || 'Unknown';
+                        if(!classMap[cls]) classMap[cls] = [];
+                        let bal = 0;
+                        hist.forEach(h => { bal += (parseFloat(h.balance) || 0); });
+                        classMap[cls].push({ ...s, pendingBal: bal });
+                    }
+                });
+                let total = Object.values(classMap).reduce((a, v) => a + v.length, 0);
+                let listHtml = total === 0
+                    ? '<div style="text-align:center;padding:40px;"><i class="fas fa-check-circle" style="font-size:48px;color:#10b981;"></i><p style="color:#10b981;font-weight:700;font-size:16px;margin-top:12px;">Koi defaulter nahi! Sab payments up-to-date hain.</p></div>'
+                    : Object.entries(classMap).sort(([a],[b])=>a.localeCompare(b)).map(([cls, sts]) => `
+                        <div style="margin-bottom:18px;">
+                            <div style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:10px 18px;border-radius:12px 12px 0 0;font-weight:700;font-size:14px;">
+                                <i class="fas fa-chalkboard"></i> ${cls} <span style="background:rgba(255,255,255,0.25);padding:2px 10px;border-radius:20px;margin-left:8px;">${sts.length} students</span>
+                            </div>
+                            ${sts.map(s => `<div style="background:white;border:1px solid #e0e0e0;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;border-top:none;" onclick="navigateTo(viewFeesStructure,'${s.id}','${s.name}')" style="cursor:pointer;">
+                                <div>
+                                    <div style="font-weight:600;font-size:14px;"><i class="fas fa-user" style="color:#ef4444;"></i> ${s.name}</div>
+                                    <div style="font-size:12px;color:#666;"><i class="fas fa-phone"></i> ${s.contact}</div>
+                                </div>
+                                <div style="text-align:right;">
+                                    ${s.pendingBal > 0 ? `<div style="background:#fef2f2;color:#ef4444;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;">₹${s.pendingBal} balance</div>` : ''}
+                                    <i class="fas fa-chevron-right" style="color:#667eea;margin-top:4px;"></i>
+                                </div>
+                            </div>`).join('')}
+                        </div>`).join('');
+
+                let periodBtns = periods.map(p => `<button onclick="buildDefaulterList(${p.months})" style="padding:8px 16px;border:2px solid ${periodMonths===p.months?'#667eea':'#e0e0e0'};border-radius:20px;background:${periodMonths===p.months?'linear-gradient(135deg,#667eea,#764ba2)':'white'};color:${periodMonths===p.months?'white':'#333'};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">${p.label}</button>`).join('');
+
+                document.getElementById('defaulterContainer').innerHTML = `
+                    <div style="font-size:13px;color:#666;margin-bottom:8px;">Kin students ne <strong>is period mein koi payment nahi ki</strong>:</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;">${periodBtns}</div>
+                    <div style="margin-bottom:10px;font-weight:700;font-size:15px;color:#ef4444;"><i class="fas fa-exclamation-triangle"></i> ${total} Defaulter${total!==1?'s':''} Found</div>
+                    ${listHtml}`;
+                window.buildDefaulterList = buildDefaulterList;
+            }
+
+            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Defaulter List', true)}</div><div class="inner-container"><div class="form-card">
+                <div class="form-title"><i class="fas fa-exclamation-triangle" style="color:#ef4444;"></i> Fee Defaulter List</div>
+                <div id="defaulterContainer" style="padding:4px 0;"></div>
+            </div></div>${getOverlay()}</div>`;
+            buildDefaulterList(currentPeriodMonths);
+            window.buildDefaulterList = buildDefaulterList;
+        }
+
         function renderStudentList() {
             document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Select Class', true)}</div><div class="inner-container"><div class="form-card"><div class="two-column-layout"><div class="image-column"><img src="${img.classIcon}" class="big-logo"></div><div class="form-column"><div class="form-title"><i class="fas fa-chalkboard"></i> Select Class</div><div class="search-section"><select class="class-selector" id="studentClassSelect" onchange="if(this.value) navigateTo(viewClassStudents, this.value)"><option value="">-- Select Class --</option>${classList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select><button class="btn btn-success" onclick="navigateTo(showAddStudentForm)"><i class="fas fa-plus"></i> Add Student</button></div></div></div></div></div>${getOverlay()}</div>`;
         }
@@ -3698,13 +3944,28 @@
                 let btns = isApproved
                     ? '<button class="btn btn-warning btn-sm" onclick="viewPayment(\''+ad.id+'\')"><i class="fas fa-eye"></i> View</button><button class="btn btn-danger btn-sm" onclick="deleteAdmission(\''+ad.id+'\')"><i class="fas fa-trash"></i> Delete</button>'
                     : '<button class="btn btn-warning btn-sm" onclick="viewPayment(\''+ad.id+'\')"><i class="fas fa-eye"></i> View</button><button class="btn btn-success btn-sm" onclick="approveAdmission(\''+ad.id+'\')"><i class="fas fa-check"></i> Approve</button><button class="btn btn-danger btn-sm" onclick="deleteAdmission(\''+ad.id+'\')"><i class="fas fa-trash"></i> Delete</button>';
-                if(ad.type==='single') singles+='<div class="student-card"><div class="student-info"><span><i class="fas fa-user"></i> '+ad.name+badge+'</span><span><i class="fas fa-chalkboard"></i> '+(ad.newClass||'')+'</span><span><i class="fas fa-phone"></i> '+(ad.contact||'')+'</span><span><i class="far fa-calendar"></i> '+(ad.date||'')+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+btns+'</div></div>';
-                else families+='<div class="student-card"><div class="student-info"><span><i class="fas fa-users"></i> Family'+badge+'</span><span><i class="fas fa-user"></i> '+((ad.students||[]).map(s=>s.name).join(', '))+'</span><span><i class="fas fa-phone"></i> '+(ad.contact||'')+'</span><span><i class="far fa-calendar"></i> '+(ad.date||'')+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+btns+'</div></div>';
+                let admBadge = ad.admissionSeqNo ? '<span style="background:#e0e7ff;color:#667eea;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;margin-left:6px;">ADM-'+String(ad.admissionSeqNo).padStart(4,'0')+'</span>' : '';
+                if(ad.type==='single') singles+='<div class="student-card"><div class="student-info"><span><i class="fas fa-user"></i> '+ad.name+badge+admBadge+'</span><span><i class="fas fa-chalkboard"></i> '+(ad.newClass||'')+'</span><span><i class="fas fa-phone"></i> '+(ad.contact||'')+'</span><span><i class="far fa-calendar"></i> '+(ad.date||'')+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+btns+'</div></div>';
+                else families+='<div class="student-card"><div class="student-info"><span><i class="fas fa-users"></i> Family'+badge+admBadge+'</span><span><i class="fas fa-user"></i> '+((ad.students||[]).map(s=>s.name).join(', '))+'</span><span><i class="fas fa-phone"></i> '+(ad.contact||'')+'</span><span><i class="far fa-calendar"></i> '+(ad.date||'')+'</span></div><div style="display:flex;gap:8px;flex-wrap:wrap;">'+btns+'</div></div>';
             });
             document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Approval', true)}</div><div class="inner-container"><div class="form-card"><div class="two-column-layout" style="align-items:flex-start;"><div class="image-column" style="min-width:160px;max-width:180px;"><img src="${img.singleProfile}" style="width:160px;height:160px;object-fit:contain;"></div><div class="form-column"><div class="form-title"><i class="fas fa-check-circle"></i> All Admissions</div>${singles||families ? (singles?`<h3 style="margin:15px 0 10px"><i class="fas fa-user-graduate"></i> Single Admissions</h3>${singles}`:'')+(families?`<h3 style="margin:15px 0 10px"><i class="fas fa-users"></i> Family Admissions</h3>${families}`:'') : '<div style="text-align:center;padding:40px;"><i class="fas fa-clipboard" style="font-size:48px;color:#94a3b8;"></i><p>Koi bhi admission nahi hai!</p></div>'}</div></div></div></div>${getOverlay()}</div>`; }
         
         function viewPayment(id) { navigateTo(renderAdmissionDetail, id); }
-        function approveAdmission(id) { let ad = admissions.find(a=>a.id==id); if(ad){ ad.status='approved'; fsSave('admissions', admissions); localStorage.setItem('eRegister_admissions',JSON.stringify(admissions)); showPopup('✅ Student approved and added to class!'); navigateTo(renderApproval); } }
+        function approveAdmission(id) {
+            let ad = admissions.find(a=>a.id==id);
+            if(ad){
+                ad.status='approved';
+                // Assign next admission sequence number
+                window._admissionSeqNumber = (window._admissionSeqNumber || 0) + 1;
+                ad.admissionSeqNo = window._admissionSeqNumber;
+                SCHOOL_DOC.set({ admissionSeqNumber: String(window._admissionSeqNumber) }, { merge: true }).catch(()=>{});
+                localStorage.setItem('eRegister_admission_seq', String(window._admissionSeqNumber));
+                fsSave('admissions', admissions);
+                localStorage.setItem('eRegister_admissions',JSON.stringify(admissions));
+                showPopup('✅ Student approved! Admission No: ADM-' + String(window._admissionSeqNumber).padStart(4,'0'));
+                navigateTo(renderApproval);
+            }
+        }
         function deleteAdmission(id) {
             if(!confirm('Are you sure you want to delete this admission permanently?')) return;
             admissions = admissions.filter(a => String(a.id) !== String(id));
@@ -4328,16 +4589,376 @@
             };
         }
 
+        // ==================== WALLPAPER SETTING ====================
+        function renderWallpaperSetting() {
+            const wallpapers = [
+                { url:'https://i.ibb.co/FkPgyg6n', label:'Wallpaper 1' },
+                { url:'https://i.ibb.co/21fJyJDf', label:'Wallpaper 2' },
+                { url:'https://i.ibb.co/ZRvGPFyv', label:'Wallpaper 3' },
+                { url:'https://i.ibb.co/Tq0nQxH3', label:'Wallpaper 4' }
+            ];
+            let gridHtml = wallpapers.map(w => {
+                let isSelected = selectedWallpaper === w.url;
+                return `<div onclick="applyWallpaper('${w.url}')" style="cursor:pointer;border-radius:16px;overflow:hidden;border:${isSelected?'4px solid #667eea':'3px solid transparent'};box-shadow:${isSelected?'0 0 0 3px #667eea':'0 2px 12px rgba(0,0,0,0.15)'};transition:all 0.2s;position:relative;">
+                    <img src="${w.url}" alt="${w.label}" style="width:100%;height:160px;object-fit:cover;display:block;" onerror="this.parentNode.style.background='#e0e0e0'">
+                    ${isSelected?`<div style="position:absolute;top:8px;right:8px;background:#10b981;color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:16px;"><i class='fas fa-check'></i></div>`:''}
+                    <div style="padding:8px 10px;font-size:13px;font-weight:700;color:#333;background:white;text-align:center;">${w.label}</div>
+                </div>`;
+            }).join('');
+            let noneSelected = !selectedWallpaper;
+            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Setting', true)}</div><div class="inner-container"><div class="form-card"><div class="form-title"><i class="fas fa-image"></i> Wallpaper Setting</div><p style="color:#666;margin-bottom:20px;font-size:14px;"><i class="fas fa-info-circle"></i> Select a wallpaper for your home screen. Click to apply.</p>
+            <div style="margin-bottom:20px;"><button onclick="applyWallpaper('')" style="padding:10px 22px;border-radius:30px;border:${noneSelected?'3px solid #667eea':'2px solid #ccc'};background:${noneSelected?'linear-gradient(135deg,#667eea,#764ba2)':'white'};color:${noneSelected?'white':'#333'};font-weight:600;cursor:pointer;font-size:14px;"><i class="fas fa-times-circle"></i> No Wallpaper (Default)</button></div>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;">${gridHtml}</div>
+            </div></div>${getOverlay()}</div>`;
+        }
+        function applyWallpaper(url) {
+            selectedWallpaper = url;
+            fsSave('selectedWallpaper', url);
+            localStorage.setItem('eRegister_wallpaper', url);
+            showPopup(url ? '✅ Wallpaper applied successfully!' : '✅ Wallpaper removed.');
+            renderWallpaperSetting();
+        }
+
+        // ==================== QUICK PAYMENT ====================
+        function renderQuickPayment() {
+            let now = new Date();
+            let dateStr = now.toLocaleDateString('en-IN', { day:'2-digit', month:'long', year:'numeric' });
+            let timeStr = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+            // item rows stored in window scope so inline handlers can access
+            window._qpRows = [{ id:1, item:'', qty:1, price:0 }];
+
+            document.getElementById('app').innerHTML = `
+            <div class="inner-bg"><div class="sticky-header">${getHeader('Quick Payment', true)}</div><div class="inner-container">
+            <div class="form-card">
+
+            <!-- header: logo + name + property + date -->
+            <div class="two-column-layout" style="align-items:flex-start;margin-bottom:18px;">
+                <div class="image-column">
+                    <img src="${img.quickPaymentLogo}" class="big-logo"
+                         onerror="this.onerror=null;this.src='${img.quickPaymentIconFallback}'">
+                </div>
+                <div class="form-column">
+                    <div class="form-title"><i class="fas fa-bolt"></i> Quick Payment</div>
+                    <div style="background:#f0f9ff;border-radius:10px;padding:8px 13px;margin-bottom:14px;font-size:13px;color:#0369a1;font-weight:600;">
+                        <i class="fas fa-clock"></i> ${dateStr} &nbsp; ${timeStr}
+                    </div>
+                    <div class="form-row">
+                        <div class="input-group">
+                            <label><i class="fas fa-user"></i> Name</label>
+                            <input type="text" id="qpName" placeholder="Enter name">
+                        </div>
+                        <div class="input-group">
+                            <label><i class="fas fa-tag"></i> Property</label>
+                            <select id="qpProperty">
+                                <option value="">-- Select --</option>
+                                <option>Book Seller</option><option>Dress Seller</option>
+                                <option>Petrol/Diesel</option><option>Electricity</option>
+                                <option>Rent</option><option>Maintenance</option>
+                                <option>Advance Payment</option><option>Other</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- items table -->
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:700;font-size:14px;color:#1a1a2e;margin-bottom:10px;">
+                    <i class="fas fa-boxes" style="color:#667eea;"></i> Items
+                </div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;min-width:380px;" id="qpItemsTable">
+                        <thead>
+                            <tr style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;font-size:12px;">
+                                <th style="padding:8px 6px;text-align:center;width:28px;">#</th>
+                                <th style="padding:8px 6px;text-align:left;">Item Name</th>
+                                <th style="padding:8px 6px;text-align:center;width:56px;">Qty</th>
+                                <th style="padding:8px 6px;text-align:right;width:80px;">Price (₹)</th>
+                                <th style="padding:8px 6px;text-align:right;width:72px;">Amount</th>
+                                <th style="padding:8px 4px;width:24px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="qpItemsBody"></tbody>
+                    </table>
+                </div>
+                <button onclick="window._addQPRow()" style="margin-top:10px;padding:7px 18px;border-radius:20px;border:2px dashed #667eea;background:white;color:#667eea;font-weight:700;font-size:13px;cursor:pointer;">
+                    <i class="fas fa-plus"></i> Add Item
+                </button>
+            </div>
+
+            <!-- summary box -->
+            <div style="background:#f8f9fa;border-radius:16px;padding:16px;margin-bottom:18px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                    <span style="font-size:14px;color:#555;font-weight:600;"><i class="fas fa-calculator" style="color:#667eea;"></i> Total Amount</span>
+                    <span id="qpTotalDisplay" style="font-size:16px;font-weight:700;color:#1a1a2e;">₹0</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                    <span style="font-size:14px;color:#555;font-weight:600;"><i class="fas fa-percent" style="color:#f59e0b;"></i> Discount (₹)</span>
+                    <input type="number" id="qpDiscount" value="0" min="0"
+                           style="width:110px;border:1px solid #d1d5db;border-radius:8px;padding:6px 8px;font-size:14px;text-align:right;"
+                           oninput="window._calcQPSummary()">
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                    <span style="font-size:14px;color:#555;font-weight:600;"><i class="fas fa-hand-holding-usd" style="color:#10b981;"></i> Submitted (₹)</span>
+                    <input type="number" id="qpSubmitted" value="0" min="0"
+                           style="width:110px;border:1px solid #d1d5db;border-radius:8px;padding:6px 8px;font-size:14px;text-align:right;"
+                           oninput="window._calcQPSummary()">
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 0;">
+                    <span style="font-size:16px;font-weight:700;color:#1a1a2e;"><i class="fas fa-wallet" style="color:#667eea;"></i> Balance</span>
+                    <span id="qpBalanceDisplay" style="font-size:22px;font-weight:800;color:#667eea;">₹0</span>
+                </div>
+            </div>
+
+            <div id="progressContainer" class="progress-container"><div id="progressBar" class="progress-bar"></div></div>
+            <button class="btn btn-success" style="width:100%;padding:14px;font-size:16px;"
+                    onclick="window._showQPSaveOptions()">
+                <i class="fas fa-save"></i> Save Payment
+            </button>
+            <div id="qpSaveOptionsBox" style="display:none;margin-top:16px;background:#f0f4ff;border-radius:16px;padding:18px;text-align:center;">
+                <p style="font-weight:700;font-size:15px;margin-bottom:14px;color:#1a1a2e;">
+                    <i class="fas fa-question-circle"></i> Save as:
+                </p>
+                <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+                    <button onclick="window._saveQP('expense')"
+                        style="background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;padding:12px 24px;border-radius:30px;font-size:15px;font-weight:700;cursor:pointer;">
+                        <i class="fas fa-arrow-down"></i> Expense
+                    </button>
+                    <button onclick="window._saveQP('income')"
+                        style="background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;padding:12px 24px;border-radius:30px;font-size:15px;font-weight:700;cursor:pointer;">
+                        <i class="fas fa-arrow-up"></i> Income
+                    </button>
+                </div>
+            </div>
+
+            </div></div>${getOverlay()}</div>`;
+
+            // ── helpers ───────────────────────────────────────────
+            window._renderQPRows = function() {
+                let rows = window._qpRows;
+                document.getElementById('qpItemsBody').innerHTML = rows.map((r, i) => {
+                    let amt = (parseFloat(r.qty)||0) * (parseFloat(r.price)||0);
+                    return `<tr style="background:${i%2===0?'white':'#f9fafb'};">
+                        <td style="padding:6px;text-align:center;font-size:12px;color:#999;">${i+1}</td>
+                        <td style="padding:6px;">
+                            <input value="${r.item||''}"
+                                   placeholder="Item name"
+                                   style="width:100%;border:1px solid #e5e7eb;border-radius:7px;padding:5px 8px;font-size:13px;"
+                                   oninput="window._qpRows[${i}].item=this.value">
+                        </td>
+                        <td style="padding:6px;text-align:center;">
+                            <input type="text" inputmode="numeric" value="${r.qty||1}"
+                                   style="width:50px;border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:13px;text-align:center;"
+                                   oninput="window._qpRows[${i}].qty=+this.value||1;window._updateQPRowAmt(${i});window._calcQPSummary()">
+                        </td>
+                        <td style="padding:6px;text-align:right;">
+                            <input type="text" inputmode="numeric" value="${r.price||0}"
+                                   style="width:72px;border:1px solid #e5e7eb;border-radius:7px;padding:5px 6px;font-size:13px;text-align:right;"
+                                   oninput="window._qpRows[${i}].price=+this.value||0;window._updateQPRowAmt(${i});window._calcQPSummary()">
+                        </td>
+                        <td id="qpAmt_${i}" style="padding:6px;text-align:right;font-size:13px;font-weight:700;color:#667eea;">₹${amt}</td>
+                        <td style="padding:4px;text-align:center;">
+                            ${rows.length>1 ? `<button onclick="window._removeQPRow(${i})"
+                                style="background:#fee2e2;border:none;color:#ef4444;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer;font-weight:700;">✕</button>` : ''}
+                        </td>
+                    </tr>`;
+                }).join('');
+            };
+
+            window._updateQPRowAmt = function(i) {
+                let r = window._qpRows[i];
+                let amt = (parseFloat(r.qty)||0) * (parseFloat(r.price)||0);
+                let el = document.getElementById('qpAmt_' + i);
+                if(el) el.textContent = '₹' + amt;
+            };
+
+            window._addQPRow = function() {
+                window._qpRows.push({ id: Date.now(), item:'', qty:1, price:0 });
+                window._renderQPRows();
+                window._calcQPSummary();
+            };
+
+            window._removeQPRow = function(idx) {
+                window._qpRows.splice(idx, 1);
+                window._renderQPRows();
+                window._calcQPSummary();
+            };
+
+            window._calcQPSummary = function() {
+                let grandTotal = window._qpRows.reduce((s,r) => s + (parseFloat(r.qty)||0)*(parseFloat(r.price)||0), 0);
+                let disc  = parseFloat(document.getElementById('qpDiscount').value)||0;
+                let subm  = parseFloat(document.getElementById('qpSubmitted').value)||0;
+                let bal   = Math.max(grandTotal - disc - subm, 0);
+                document.getElementById('qpTotalDisplay').textContent   = '₹' + grandTotal;
+                document.getElementById('qpBalanceDisplay').textContent = '₹' + bal;
+            };
+
+            window._showQPSaveOptions = function() {
+                let name = document.getElementById('qpName').value.trim();
+                let prop = document.getElementById('qpProperty').value;
+                let hasItem = window._qpRows.some(r => r.item.trim());
+                if(!name){ showPopup('Name required!', false); return; }
+                if(!prop){ showPopup('Select property type!', false); return; }
+                if(!hasItem){ showPopup('Enter at least one item!', false); return; }
+                document.getElementById('qpSaveOptionsBox').style.display = 'block';
+                document.getElementById('qpSaveOptionsBox').scrollIntoView({ behavior:'smooth' });
+            };
+
+            window._saveQP = function(type) {
+                let grandTotal = window._qpRows.reduce((s,r) => s + (parseFloat(r.qty)||0)*(parseFloat(r.price)||0), 0);
+                let disc  = parseFloat(document.getElementById('qpDiscount').value)||0;
+                let subm  = parseFloat(document.getElementById('qpSubmitted').value)||0;
+                let bal   = Math.max(grandTotal - disc - subm, 0);
+                let rec = {
+                    id: Date.now(),
+                    name:       document.getElementById('qpName').value.trim(),
+                    property:   document.getElementById('qpProperty').value,
+                    items:      window._qpRows.filter(r => r.item.trim()),
+                    total:      grandTotal,
+                    discount:   disc,
+                    submitted:  subm,
+                    balance:    bal,
+                    date: new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }),
+                    time: new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }),
+                    type: type
+                };
+                quickPayments.push(rec);
+                fsSave('quickPayments', quickPayments);
+                localStorage.setItem('eRegister_quick_payments', JSON.stringify(quickPayments));
+                showProgress(() => {
+                    showPopup('✅ Saved as ' + (type === 'expense' ? 'Expense' : 'Income') + '!');
+                    navigateTo(renderHome);
+                });
+            };
+
+            // initial render
+            window._renderQPRows();
+            window._calcQPSummary();
+        }
+
+        // ==================== DAY BOOK ====================
+        function renderDayBook() {
+            let income  = quickPayments.filter(p => p.type === 'income');
+            let expense = quickPayments.filter(p => p.type === 'expense');
+
+            // helper: get item summary from new (items[]) or old (item string) format
+            function getItemSummary(e) {
+                if(Array.isArray(e.items) && e.items.length) {
+                    let lines = e.items.map(it => {
+                        let qty = parseFloat(it.qty)||0;
+                        let price = parseFloat(it.price)||0;
+                        let itemTotal = qty * price;
+                        return `<span style="display:block;">${it.item} ×${qty} @₹${price} = <strong>₹${itemTotal}</strong></span>`;
+                    });
+                    let grandTotal = e.items.reduce((s,it) => s+(parseFloat(it.qty)||0)*(parseFloat(it.price)||0), 0);
+                    lines.push(`<span style="display:block;border-top:1px solid #e0e0e0;margin-top:3px;padding-top:3px;color:#667eea;font-weight:700;">Total: ₹${grandTotal}</span>`);
+                    return lines.join('');
+                }
+                return (e.item||'').replace(/\n/g,'<br>');
+            }
+            function getTotalQty(e) {
+                if(Array.isArray(e.items) && e.items.length) {
+                    return e.items.reduce((s,it) => s+(parseFloat(it.qty)||0), 0);
+                }
+                return e.qty||1;
+            }
+            // name field: new format uses 'name', old uses 'creditorName'
+            function getName(e) { return e.name || e.creditorName || ''; }
+
+            function buildTable(entries, color) {
+                if(entries.length === 0) {
+                    return `<div style="text-align:center;padding:24px;color:#999;font-size:14px;">
+                        <i class="fas fa-inbox"></i> No ${color === '#10b981' ? 'income' : 'expense'} entries yet.
+                    </div>`;
+                }
+                let rows = entries.map((e, i) => `<tr style="background:${i%2===0?'white':'#f9fafb'};">
+                    <td style="padding:8px 10px;font-size:12px;white-space:nowrap;">${e.date}<br><span style="color:#999;font-size:10px;">${e.time||''}</span></td>
+                    <td style="padding:8px 10px;font-size:12px;font-weight:600;">${getName(e)}</td>
+                    <td style="padding:8px 10px;font-size:12px;">${e.property||''}</td>
+                    <td style="padding:8px 10px;font-size:12px;max-width:160px;word-break:break-word;">${getItemSummary(e)}</td>
+                    <td style="padding:8px 10px;font-size:12px;text-align:center;">${getTotalQty(e)}</td>
+                    <td style="padding:8px 10px;font-size:12px;text-align:right;">₹${e.discount||0}</td>
+                    <td style="padding:8px 10px;font-size:13px;font-weight:700;text-align:right;color:${color};">₹${e.total||0}</td>
+                    <td style="padding:8px 10px;font-size:12px;text-align:right;color:#667eea;">₹${e.balance||0}</td>
+                </tr>`).join('');
+                let sumTotal   = entries.reduce((s,e) => s + (e.total||0), 0);
+                let sumBalance = entries.reduce((s,e) => s + (e.balance||0), 0);
+                return `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:580px;">
+                    <thead><tr style="background:${color};color:white;font-size:12px;">
+                        <th style="padding:10px 8px;text-align:left;white-space:nowrap;">Date & Time</th>
+                        <th style="padding:10px 8px;text-align:left;">Name</th>
+                        <th style="padding:10px 8px;text-align:left;">Property</th>
+                        <th style="padding:10px 8px;text-align:left;">Items</th>
+                        <th style="padding:10px 8px;text-align:center;">Qty</th>
+                        <th style="padding:10px 8px;text-align:right;">Discount</th>
+                        <th style="padding:10px 8px;text-align:right;">Total</th>
+                        <th style="padding:10px 8px;text-align:right;">Balance</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                    <tfoot><tr style="background:${color}22;font-weight:700;">
+                        <td colspan="6" style="padding:10px;text-align:right;font-size:13px;color:${color};">Grand Total:</td>
+                        <td style="padding:10px;text-align:right;font-size:14px;color:${color};">₹${sumTotal}</td>
+                        <td style="padding:10px;text-align:right;font-size:13px;color:#667eea;">₹${sumBalance}</td>
+                    </tr></tfoot>
+                </table></div>`;
+            }
+
+            document.getElementById('app').innerHTML = `
+            <div class="inner-bg"><div class="sticky-header">${getHeader('Day Book', true)}</div><div class="inner-container">
+            <div class="form-card">
+            <div class="two-column-layout" style="align-items:flex-start;margin-bottom:20px;">
+                <div class="image-column">
+                    <img src="${img.dayBookIcon}" class="big-logo"
+                         onerror="this.onerror=null;this.src='${img.dayBookIconFallback}'">
+                </div>
+                <div class="form-column">
+                    <div class="form-title"><i class="fas fa-book"></i> Day Book</div>
+                    <p style="color:#666;font-size:13px;">All Quick Payment records — income &amp; expense entries.</p>
+                    <button class="btn btn-primary" style="margin-top:10px;" onclick="navigateTo(renderQuickPayment)">
+                        <i class="fas fa-plus"></i> Add Quick Payment
+                    </button>
+                </div>
+            </div>
+            <div style="background:linear-gradient(135deg,#dcfce7,#bbf7d0);border-radius:16px;padding:16px;margin-bottom:20px;">
+                <h3 style="color:#15803d;margin-bottom:12px;font-size:16px;font-weight:700;"><i class="fas fa-arrow-up"></i> Income</h3>
+                ${buildTable(income, '#10b981')}
+            </div>
+            <div style="background:linear-gradient(135deg,#fee2e2,#fecaca);border-radius:16px;padding:16px;">
+                <h3 style="color:#dc2626;margin-bottom:12px;font-size:16px;font-weight:700;"><i class="fas fa-arrow-down"></i> Expense</h3>
+                ${buildTable(expense, '#ef4444')}
+            </div>
+            </div></div>${getOverlay()}</div>`;
+        }
+
+        // ==================== INVENTORY ====================
+        function renderInventory() {
+            document.getElementById('app').innerHTML = `
+            <div class="inner-bg"><div class="sticky-header">${getHeader('Inventory', true)}</div><div class="inner-container">
+            <div class="form-card" style="text-align:center;padding:48px 24px;">
+                <img src="${img.inventoryIcon}" style="width:110px;height:110px;object-fit:contain;margin-bottom:20px;"
+                     onerror="this.onerror=null;this.src='${img.inventoryIconFallback}'">
+                <div class="form-title" style="text-align:center;"><i class="fas fa-boxes"></i> Inventory</div>
+                <p style="color:#666;font-size:15px;margin-top:16px;">Inventory management coming soon.<br>
+                    <span style="font-size:13px;color:#999;">Track stock, items, and supplies here.</span>
+                </p>
+            </div></div>${getOverlay()}</div>`;
+        }
+
         // ==================== ADMISSION ====================
         function renderAdmissionType() {
-            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('New Admission', true)}</div><div class="inner-container"><div class="form-card"><div class="form-title"><i class="fas fa-user-graduate"></i> New Admission</div><div class="admission-type-buttons"><button class="admission-type-btn active" onclick="selectAdmissionType('single')">Single Admission</button><button class="admission-type-btn" onclick="selectAdmissionType('family')">Family Admission</button></div><div id="admissionContent"></div></div></div>${getOverlay()}</div>`;
+            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('New Admission', true)}</div><div class="inner-container"><div class="form-card"><div class="form-title"><i class="fas fa-user-graduate"></i> New Admission</div><div class="admission-type-buttons"><button class="admission-type-btn active" onclick="selectAdmissionType('single')">Single Admission</button><button class="admission-type-btn" onclick="selectAdmissionType('double')">Double Admission</button><button class="admission-type-btn" onclick="selectAdmissionType('family')">Family Admission</button></div><div id="admissionContent"></div></div></div>${getOverlay()}</div>`;
             selectAdmissionType('single');
         }
         
         function selectAdmissionType(t) {
-            let btns=document.querySelectorAll('.admission-type-btn'); btns.forEach((b,i)=>{ if((t==='single'&&i===0)||(t==='family'&&i===1)) b.classList.add('active'); else b.classList.remove('active'); });
+            let btns=document.querySelectorAll('.admission-type-btn');
+            btns.forEach((b,i)=>{ b.classList.remove('active'); });
+            if(t==='single') btns[0]&&btns[0].classList.add('active');
+            else if(t==='double') btns[1]&&btns[1].classList.add('active');
+            else if(t==='family') btns[2]&&btns[2].classList.add('active');
             let div=document.getElementById('admissionContent');
             if(t==='single') div.innerHTML = `<div class="two-column-layout"><div class="form-column"><h3><i class="fas fa-user-plus"></i> Single Student Admission</h3><p style="color:#666;margin:15px 0;">Register one student at a time</p><button class="start-btn" onclick="navigateTo(renderSingleStep1)"><i class="fas fa-arrow-right"></i> Start Single Admission</button></div><div class="image-column"><img src="${img.singleProfile}" class="big-logo"></div></div>`;
+            else if(t==='double') div.innerHTML = `<div class="two-column-layout"><div class="form-column"><h3><i class="fas fa-user-friends"></i> Double Student Admission</h3><p style="color:#666;margin:15px 0;">Register two students together (same family)</p><button class="start-btn" onclick="navigateTo(renderDoubleStep1)"><i class="fas fa-arrow-right"></i> Start Double Admission</button></div><div class="image-column"><img src="${img.doubleProfile}" class="big-logo" onerror="this.src='${img.singleProfile}'"></div></div>`;
             else div.innerHTML = `<div class="two-column-layout"><div class="form-column"><h3><i class="fas fa-users"></i> Family Admission</h3><p style="color:#666;margin:15px 0;">Register multiple students from same family</p><button class="start-btn" onclick="navigateTo(renderFamilyStep1)"><i class="fas fa-arrow-right"></i> Start Family Admission</button></div><div class="image-column"><img src="${img.familyProfile}" class="big-logo"></div></div>`;
         }
 
@@ -4351,7 +4972,7 @@
             let ne = validateName(n); if(ne){ showPopup(ne, false); return; }
             let ce = validateContact(c); if(ce){ showPopup(ce, false); return; }
             singleStep1Data = { name:n, fatherName:document.getElementById('s1Father').value, motherName:document.getElementById('s1Mother').value, dob:document.getElementById('s1Dob').value, gender:document.getElementById('s1Gender').value, contact:c, presentAddress:document.getElementById('s1Present').value, permanentAddress:document.getElementById('s1Permanent').value, fatherAadhar:document.getElementById('s1FAadhar').value, motherAadhar:document.getElementById('s1MAadhar').value };
-            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Single Admission', true)}</div><div class="inner-container"><div class="form-card"><div class="two-column-layout"><div class="form-column"><div class="form-title"><i class="fas fa-school"></i> Previous School Details</div><div class="form-row"><div class="input-group"><label><i class="fas fa-school"></i> Old School Name</label><input type="text" id="oldSchool"></div><div class="input-group"><label><i class="fas fa-id-card"></i> TC Number</label><input type="text" id="tcNumber"></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-chalkboard"></i> Old Passed Class</label><input type="text" id="oldClass"></div><div class="input-group"><label><i class="fas fa-user-graduate"></i> New Admission Class</label><select id="newClassSel"><option value="">Select</option>${classList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div></div><div id="progressContainer" class="progress-container"><div id="progressBar" class="progress-bar"></div></div><div class="flex-btns"><button class="btn btn-primary" onclick="navigateTo(renderSingleStep1)"><i class="fas fa-arrow-left"></i> Back</button><button class="btn btn-success" onclick="submitSingle()"><i class="fas fa-check"></i> Submit Admission</button></div></div><div class="image-column"><img src="${img.singleProfile}" class="big-logo"></div></div></div></div>${getOverlay()}</div>`;
+            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Single Admission', true)}</div><div class="inner-container"><div class="form-card"><div class="two-column-layout"><div class="form-column"><div class="form-title"><i class="fas fa-school"></i> Previous School Details</div><div class="form-row"><div class="input-group"><label><i class="fas fa-school"></i> Old School Name</label><input type="text" id="oldSchool"></div><div class="input-group"><label><i class="fas fa-id-card"></i> PEN Number</label><input type="text" id="tcNumber"></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-chalkboard"></i> Old Passed Class</label><input type="text" id="oldClass"></div><div class="input-group"><label><i class="fas fa-user-graduate"></i> New Admission Class</label><select id="newClassSel"><option value="">Select</option>${classList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-fingerprint"></i> Student Aadhar Number</label><input type="text" id="studentAadhar" maxlength="12" inputmode="numeric" placeholder="12-digit Aadhar" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div><div class="input-group"><label><i class="fas fa-wallet"></i> Old Balance (₹)</label><input type="number" id="oldBalance" value="0" min="0" placeholder="0"></div></div><div id="progressContainer" class="progress-container"><div id="progressBar" class="progress-bar"></div></div><div class="flex-btns"><button class="btn btn-primary" onclick="navigateTo(renderSingleStep1)"><i class="fas fa-arrow-left"></i> Back</button><button class="btn btn-success" onclick="submitSingle()"><i class="fas fa-check"></i> Submit Admission</button></div></div><div class="image-column"><img src="${img.singleProfile}" class="big-logo"></div></div></div></div>${getOverlay()}</div>`;
         }
         
         function submitSingle() {
@@ -4363,9 +4984,42 @@
             if(contactErr) { showPopup(contactErr, false); return; }
             let cleanData = {};
             for(let k in singleStep1Data) cleanData[k] = sanitize(singleStep1Data[k]);
-            let admission={ id:Date.now(), type:'single', status:'pending', ...cleanData, oldSchool:sanitize(document.getElementById('oldSchool').value), tcNumber:sanitize(document.getElementById('tcNumber').value), oldClass:sanitize(document.getElementById('oldClass').value), newClass:cls, date:new Date().toLocaleString() };
+            let admission={ id:Date.now(), type:'single', status:'pending', ...cleanData, oldSchool:sanitize(document.getElementById('oldSchool').value), penNumber:sanitize(document.getElementById('tcNumber').value), tcNumber:sanitize(document.getElementById('tcNumber').value), oldClass:sanitize(document.getElementById('oldClass').value), newClass:cls, studentAadhar:sanitize(document.getElementById('studentAadhar').value), oldBalance:parseFloat(document.getElementById('oldBalance').value)||0, date:new Date().toLocaleString() };
             admissions.push(admission); fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions',JSON.stringify(admissions));
             showProgress(()=>{ showPopup('✅ Admission submitted! Waiting for approval.'); navigateTo(renderHome); });
+        }
+
+        // ==================== DOUBLE ADMISSION ====================
+        let doubleStep1Data = {};
+        function renderDoubleStep1() {
+            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Double Admission', true)}</div><div class="inner-container"><div class="form-card"><div class="two-column-layout"><div class="form-column"><div class="form-title"><i class="fas fa-user-friends"></i> Parent / Family Details</div><div class="form-row"><div class="input-group"><label><i class="fas fa-user"></i> Student 1 Name <span style="color:#ef4444;">*</span></label><input type="text" id="dbl1Name" value="${doubleStep1Data.stu1Name||''}"></div><div class="input-group"><label><i class="fas fa-user"></i> Student 2 Name <span style="color:#ef4444;">*</span></label><input type="text" id="dbl2Name" value="${doubleStep1Data.stu2Name||''}"></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-male"></i> Father Name</label><input type="text" id="dblFather" value="${doubleStep1Data.fatherName||''}"></div><div class="input-group"><label><i class="fas fa-female"></i> Mother Name</label><input type="text" id="dblMother" value="${doubleStep1Data.motherName||''}"></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-phone"></i> Contact Number <span style="color:#ef4444;">*</span></label><input type="tel" id="dblContact" value="${doubleStep1Data.contact||''}"></div><div class="input-group"><label><i class="fas fa-venus-mars"></i> Gender (Student 1)</label><select id="dbl1Gender"><option value="">Select</option><option ${doubleStep1Data.stu1Gender==='Male'?'selected':''}>Male</option><option ${doubleStep1Data.stu1Gender==='Female'?'selected':''}>Female</option></select></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-venus-mars"></i> Gender (Student 2)</label><select id="dbl2Gender"><option value="">Select</option><option ${doubleStep1Data.stu2Gender==='Male'?'selected':''}>Male</option><option ${doubleStep1Data.stu2Gender==='Female'?'selected':''}>Female</option></select></div><div class="input-group"><label><i class="fas fa-calendar-alt"></i> DOB (Student 1)</label><input type="date" id="dbl1Dob" value="${doubleStep1Data.stu1Dob||''}"></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-calendar-alt"></i> DOB (Student 2)</label><input type="date" id="dbl2Dob" value="${doubleStep1Data.stu2Dob||''}"></div><div class="input-group"><label><i class="fas fa-home"></i> Present Address</label><textarea id="dblPresent" rows="2">${doubleStep1Data.presentAddress||''}</textarea></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-map-marker-alt"></i> Permanent Address</label><textarea id="dblPermanent" rows="2">${doubleStep1Data.permanentAddress||''}</textarea></div><div class="input-group"><label><i class="fas fa-id-card"></i> Father Aadhar</label><input type="text" id="dblFAadhar" value="${doubleStep1Data.fatherAadhar||''}"></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-id-card"></i> Mother Aadhar</label><input type="text" id="dblMAadhar" value="${doubleStep1Data.motherAadhar||''}"></div></div><div id="progressContainer" class="progress-container"><div id="progressBar" class="progress-bar"></div></div><button class="btn btn-primary" onclick="goToDoubleStep2()"><i class="fas fa-arrow-right"></i> Next</button></div><div class="image-column"><img src="${img.doubleProfile}" class="big-logo" onerror="this.src='${img.singleProfile}'"></div></div></div></div>${getOverlay()}</div>`;
+        }
+        function goToDoubleStep2() {
+            let n1 = document.getElementById('dbl1Name').value.trim();
+            let n2 = document.getElementById('dbl2Name').value.trim();
+            let c  = document.getElementById('dblContact').value.trim();
+            if(!n1){ showPopup('Student 1 name is required!', false); return; }
+            if(!n2){ showPopup('Student 2 name is required!', false); return; }
+            let ne = validateName(n1); if(ne){ showPopup('Student 1: ' + ne, false); return; }
+            let ne2 = validateName(n2); if(ne2){ showPopup('Student 2: ' + ne2, false); return; }
+            let ce = validateContact(c); if(ce){ showPopup(ce, false); return; }
+            doubleStep1Data = { stu1Name:n1, stu2Name:n2, fatherName:document.getElementById('dblFather').value, motherName:document.getElementById('dblMother').value, contact:c, stu1Gender:document.getElementById('dbl1Gender').value, stu2Gender:document.getElementById('dbl2Gender').value, stu1Dob:document.getElementById('dbl1Dob').value, stu2Dob:document.getElementById('dbl2Dob').value, presentAddress:document.getElementById('dblPresent').value, permanentAddress:document.getElementById('dblPermanent').value, fatherAadhar:document.getElementById('dblFAadhar').value, motherAadhar:document.getElementById('dblMAadhar').value };
+            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Double Admission', true)}</div><div class="inner-container"><div class="form-card"><div class="two-column-layout"><div class="form-column"><div class="form-title"><i class="fas fa-school"></i> Academic Details</div><div style="background:#f0f4ff;border-radius:14px;padding:14px;margin-bottom:18px;"><strong>Student 1: ${n1}</strong></div><div class="form-row"><div class="input-group"><label><i class="fas fa-school"></i> Old School Name</label><input type="text" id="dbl1OldSchool"></div><div class="input-group"><label><i class="fas fa-id-card"></i> PEN Number</label><input type="text" id="dbl1Pen"></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-chalkboard"></i> Old Passed Class</label><input type="text" id="dbl1OldClass"></div><div class="input-group"><label><i class="fas fa-user-graduate"></i> New Admission Class</label><select id="dbl1NewClass"><option value="">Select</option>${classList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-fingerprint"></i> Student Aadhar Number</label><input type="text" id="dbl1Aadhar" maxlength="12" inputmode="numeric" placeholder="12-digit" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div><div class="input-group"><label><i class="fas fa-wallet"></i> Old Balance (₹)</label><input type="number" id="dbl1OldBal" value="0" min="0"></div></div><hr style="margin:18px 0;"><div style="background:#f0f4ff;border-radius:14px;padding:14px;margin-bottom:18px;"><strong>Student 2: ${n2}</strong></div><div class="form-row"><div class="input-group"><label><i class="fas fa-school"></i> Old School Name</label><input type="text" id="dbl2OldSchool"></div><div class="input-group"><label><i class="fas fa-id-card"></i> PEN Number</label><input type="text" id="dbl2Pen"></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-chalkboard"></i> Old Passed Class</label><input type="text" id="dbl2OldClass"></div><div class="input-group"><label><i class="fas fa-user-graduate"></i> New Admission Class</label><select id="dbl2NewClass"><option value="">Select</option>${classList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-fingerprint"></i> Student Aadhar Number</label><input type="text" id="dbl2Aadhar" maxlength="12" inputmode="numeric" placeholder="12-digit" oninput="this.value=this.value.replace(/[^0-9]/g,'')"></div><div class="input-group"><label><i class="fas fa-wallet"></i> Old Balance (₹)</label><input type="number" id="dbl2OldBal" value="0" min="0"></div></div><div id="progressContainer" class="progress-container"><div id="progressBar" class="progress-bar"></div></div><div class="flex-btns"><button class="btn btn-primary" onclick="navigateTo(renderDoubleStep1)"><i class="fas fa-arrow-left"></i> Back</button><button class="btn btn-success" onclick="submitDouble()"><i class="fas fa-check"></i> Submit Double Admission</button></div></div><div class="image-column"><img src="${img.doubleProfile}" class="big-logo" onerror="this.src='${img.singleProfile}'"></div></div></div></div>${getOverlay()}</div>`;
+        }
+        function submitDouble() {
+            let c1 = document.getElementById('dbl1NewClass').value;
+            let c2 = document.getElementById('dbl2NewClass').value;
+            if(!c1){ showPopup('Select class for Student 1!', false); return; }
+            if(!c2){ showPopup('Select class for Student 2!', false); return; }
+            let cleanData = {};
+            for(let k in doubleStep1Data) cleanData[k] = sanitize(doubleStep1Data[k]);
+            let students = [
+                { id:1, name:sanitize(doubleStep1Data.stu1Name), class:c1, aadhar:sanitize(document.getElementById('dbl1Aadhar').value), penNumber:sanitize(document.getElementById('dbl1Pen').value), oldSchool:sanitize(document.getElementById('dbl1OldSchool').value), oldClass:sanitize(document.getElementById('dbl1OldClass').value), oldBalance:parseFloat(document.getElementById('dbl1OldBal').value)||0, gender:doubleStep1Data.stu1Gender, dob:doubleStep1Data.stu1Dob },
+                { id:2, name:sanitize(doubleStep1Data.stu2Name), class:c2, aadhar:sanitize(document.getElementById('dbl2Aadhar').value), penNumber:sanitize(document.getElementById('dbl2Pen').value), oldSchool:sanitize(document.getElementById('dbl2OldSchool').value), oldClass:sanitize(document.getElementById('dbl2OldClass').value), oldBalance:parseFloat(document.getElementById('dbl2OldBal').value)||0, gender:doubleStep1Data.stu2Gender, dob:doubleStep1Data.stu2Dob }
+            ];
+            let admission = { id:Date.now(), type:'double', status:'pending', ...cleanData, students, fatherName:cleanData.fatherName, motherName:cleanData.motherName, contact:cleanData.contact, date:new Date().toLocaleString() };
+            admissions.push(admission); fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions', JSON.stringify(admissions));
+            showProgress(()=>{ showPopup('✅ Double Admission submitted! Waiting for approval.'); navigateTo(renderHome); });
         }
 
         function renderFamilyStep1() {
@@ -4383,7 +5037,7 @@
         
         function renderFamilyStep2() {
             let studentsHtml='';
-            familyStudents.forEach(s=>{ studentsHtml+=`<div class="student-row" id="row${s.id}"><div class="student-header"><span class="student-title"><i class="fas fa-user-graduate"></i> Student ${s.id}</span>${familyStudents.length>1?`<div class="remove-icon" onclick="removeFamStudent(${s.id})"><i class="fas fa-trash"></i></div>`:''}</div><div class="form-row"><div class="input-group"><label><i class="fas fa-user"></i> Student Name</label><input type="text" id="famName${s.id}" onchange="updateFam(${s.id},'name',this.value)"></div><div class="input-group"><label><i class="fas fa-chalkboard"></i> Class</label><select id="famClass${s.id}" onchange="updateFam(${s.id},'class',this.value)"><option value="">Select</option>${classList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div><div class="input-group"><label><i class="fas fa-id-card"></i> Aadhar Number</label><input type="text" id="famAadhar${s.id}" onchange="updateFam(${s.id},'aadhar',this.value)"></div></div></div>`; });
+            familyStudents.forEach(s=>{ studentsHtml+=`<div class="student-row" id="row${s.id}"><div class="student-header"><span class="student-title"><i class="fas fa-user-graduate"></i> Student ${s.id}</span>${familyStudents.length>1?`<div class="remove-icon" onclick="removeFamStudent(${s.id})"><i class="fas fa-trash"></i></div>`:''}</div><div class="form-row"><div class="input-group"><label><i class="fas fa-user"></i> Student Name</label><input type="text" id="famName${s.id}" onchange="updateFam(${s.id},'name',this.value)"></div><div class="input-group"><label><i class="fas fa-chalkboard"></i> Class</label><select id="famClass${s.id}" onchange="updateFam(${s.id},'class',this.value)"><option value="">Select</option>${classList.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></div><div class="input-group"><label><i class="fas fa-fingerprint"></i> Student Aadhar Number</label><input type="text" id="famAadhar${s.id}" maxlength="12" inputmode="numeric" placeholder="12-digit Aadhar" oninput="this.value=this.value.replace(/[^0-9]/g,'')" onchange="updateFam(${s.id},'aadhar',this.value)"></div></div><div class="form-row"><div class="input-group"><label><i class="fas fa-id-card"></i> PEN Number</label><input type="text" id="famPen${s.id}" placeholder="PEN Number"></div><div class="input-group"><label><i class="fas fa-wallet"></i> Old Balance (₹)</label><input type="number" id="famOldBalance${s.id}" value="0" min="0" placeholder="0"></div></div></div>`; });
             document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Family Admission', true)}</div><div class="inner-container"><div class="form-card"><div class="two-column-layout"><div class="form-column"><div class="form-title"><i class="fas fa-user-graduate"></i> Students Details</div><div style="display:flex;justify-content:flex-end;margin-bottom:15px;"><div class="add-icon" onclick="addFamStudent()"><i class="fas fa-plus"></i></div></div>${studentsHtml}<div style="color:#999;font-size:12px;margin:10px 0;"><i class="fas fa-info-circle"></i> Max 5 students. Click + to add more.</div><div id="progressContainer" class="progress-container"><div id="progressBar" class="progress-bar"></div></div><div class="flex-btns"><button class="btn btn-primary" onclick="navigateTo(renderFamilyStep1)"><i class="fas fa-arrow-left"></i> Back</button><button class="btn btn-success" onclick="submitFamily()"><i class="fas fa-check"></i> Submit Family Admission</button></div></div><div class="image-column"><img src="${img.familyProfile}" class="big-logo"></div></div></div></div>${getOverlay()}</div>`;
         }
         
@@ -4392,7 +5046,7 @@
         function updateFam(id,f,v) { let s=familyStudents.find(s=>s.id===id); if(s) s[f]=v; }
         
         function submitFamily() {
-            let students=[]; familyStudents.forEach(s=>{ let n=document.getElementById(`famName${s.id}`)?.value; if(n) students.push({ id:s.id, name:sanitize(n), class:document.getElementById(`famClass${s.id}`)?.value||'', aadhar:sanitize(document.getElementById(`famAadhar${s.id}`)?.value||'') }); });
+            let students=[]; familyStudents.forEach(s=>{ let n=document.getElementById(`famName${s.id}`)?.value; if(n) students.push({ id:s.id, name:sanitize(n), class:document.getElementById(`famClass${s.id}`)?.value||'', aadhar:sanitize(document.getElementById(`famAadhar${s.id}`)?.value||''), penNumber:sanitize(document.getElementById(`famPen${s.id}`)?.value||''), oldBalance:parseFloat(document.getElementById(`famOldBalance${s.id}`)?.value)||0 }); });
             if(students.length===0){ showPopup('Add at least one student!',false); return; }
             // Point 5+10: Sanitize & validate family details
             let nameErr = validateName(familyDetailsData.fatherName || familyDetailsData.familyName);
