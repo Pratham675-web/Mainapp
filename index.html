@@ -125,7 +125,22 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        const SCHOOL_DOC = db.collection('eRegister').doc('schoolData');
+        // ── Multi-tenant Firestore structure ──────────────────────────
+        // REGISTRY_DOC = global login directory (sirf users/coAdmins/notifications/coins/stopApp)
+        // Har Admin ka apna alag doc: eRegister/admin_{adminCode} — uska poora data (students,
+        // classes, fees, teachers, attendance, etc.) sirf usi doc mein store/load hota hai.
+        const REGISTRY_DOC = db.collection('eRegister').doc('schoolData');
+        function getAdminDocRef(adminCode) {
+            return db.collection('eRegister').doc('admin_' + adminCode);
+        }
+        // SCHOOL_DOC ek dynamic pointer hai: login se pehle REGISTRY_DOC, login ke baad
+        // currentUser ke (ya uske parent admin ke) apne doc par switch ho jaata hai.
+        let SCHOOL_DOC = REGISTRY_DOC;
+        // Yeh fields hamesha global registry mein hi save/load honge (sab admins ke liye common).
+        const _GLOBAL_FIELDS = ['users', 'users_cs', 'coAdmins', 'coAdmins_cs', 'notifications', 'coins', 'stopApp'];
+        function _targetDoc(field) {
+            return _GLOBAL_FIELDS.indexOf(field) !== -1 ? REGISTRY_DOC : SCHOOL_DOC;
+        }
 
         // ── Sequence number helpers ──
         let _admissionSeqNumber = parseInt(localStorage.getItem('eRegister_admission_seq') || '0');
@@ -175,14 +190,22 @@
         }
 
         function fsSave(field, value) {
-            SCHOOL_DOC.set({ [field]: JSON.stringify(value) }, { merge: true })
+            _targetDoc(field).set({ [field]: JSON.stringify(value) }, { merge: true })
                 .catch(e => console.warn('Firestore write failed:', e));
         }
 
         async function fsLoadAll() {
             try {
-                let snap = await SCHOOL_DOC.get();
-                return snap.exists ? snap.data() : {};
+                let regSnap = await REGISTRY_DOC.get();
+                let regData = regSnap.exists ? regSnap.data() : {};
+                let adminData = {};
+                if (SCHOOL_DOC !== REGISTRY_DOC) {
+                    let snap = await SCHOOL_DOC.get();
+                    adminData = snap.exists ? snap.data() : {};
+                }
+                // Global registry fields + current admin's own data ek hi object mein merge,
+                // taaki neeche ka saara fsGet(fsData, ...) code bilkul waisa hi chale.
+                return Object.assign({}, regData, adminData);
             } catch(e) {
                 console.warn('Firestore load failed, using localStorage:', e);
                 return {};
@@ -702,7 +725,7 @@
         }
         function fsSaveWithChecksum(field, value) {
             let checksum = simpleHash(value);
-            SCHOOL_DOC.set({ [field]: JSON.stringify(value), [field + '_cs']: checksum }, { merge: true })
+            _targetDoc(field).set({ [field]: JSON.stringify(value), [field + '_cs']: checksum }, { merge: true })
                 .catch(e => console.warn('Firestore write failed:', e));
             localStorage.setItem('eRegister_' + field, JSON.stringify(value));
         }
@@ -818,7 +841,7 @@
 
         function showPopup(msg, ok=true) { let p = document.getElementById('customPopup'); if(p){ p.innerHTML = `<i class="fas ${ok?'fa-check-circle':'fa-exclamation-circle'}"></i> ${msg}`; p.style.background = ok ? '#10b981' : '#ef4444'; p.style.display='flex'; setTimeout(()=>p.style.display='none',3000); } }
         function showProgress(cb) { let c = document.getElementById('progressContainer'), b = document.getElementById('progressBar'); if(c){ c.style.display='block'; let w=0; let i=setInterval(()=>{ w+=10; b.style.width=w+'%'; if(w>=100){ clearInterval(i); setTimeout(()=>{ c.style.display='none'; b.style.width='0%'; if(cb) cb(); },500); } },50); } else if(cb) cb(); }
-        function logout() { cancelSessionTimeout(); sessionStorage.removeItem('eRegister_currentUser'); currentUser=null; pageHistory=[]; currentPageFn=null; renderWelcome(); }
+        function logout() { cancelSessionTimeout(); sessionStorage.removeItem('eRegister_currentUser'); currentUser=null; SCHOOL_DOC = REGISTRY_DOC; pageHistory=[]; currentPageFn=null; renderWelcome(); }
         function togglePanel() {
             const panel = document.getElementById('notificationPanel');
             const overlay = document.getElementById('overlay');
@@ -952,8 +975,40 @@
         async function initAppData() {
             document.getElementById('app').innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:20px;"><div style="width:60px;height:60px;border:5px solid rgba(255,255,255,0.3);border-top:5px solid white;border-radius:50%;animation:spin 1s linear infinite;"></div><p style="color:white;font-size:18px;font-weight:600;">Loading data...</p></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
 
-            let fsData = await fsLoadAll();
+            // Agar session resume ho rahi hai (page refresh), to admin ka apna doc pehle se point kar do
+            if(currentUser) {
+                let _resumeAdminCode = currentUser.isCoAdmin ? currentUser.adminCode : currentUser.code;
+                SCHOOL_DOC = getAdminDocRef(_resumeAdminCode);
+            }
 
+            let fsData = await fsLoadAll();
+            applyFsData(fsData);
+            window._lastFsData = fsData;
+
+            _attachRegistrySnapshotListener();
+
+            let integrityWarn = [];
+            if(!verifyChecksum(fsData, 'users'))      integrityWarn.push('users');
+            if(!verifyChecksum(fsData, 'admissions')) integrityWarn.push('admissions');
+            if(!verifyChecksum(fsData, 'paymentHistory')) integrityWarn.push('paymentHistory');
+            if(integrityWarn.length > 0) {
+                console.warn('[Security] Checksum mismatch for:', integrityWarn, '— Firebase data accepted (localStorage ignored)');
+            }
+
+            if(currentUser) {
+                let freshUser = users.find(u => u.code === currentUser.code);
+                if(freshUser && freshUser.blocked) {
+                    sessionStorage.removeItem('eRegister_currentUser');
+                    currentUser = null;
+                } else {
+                    setupSessionTimeout();
+                }
+            }
+
+            renderWelcome();
+        }
+
+        function applyFsData(fsData) {
             users             = fsGet(fsData, 'users',              'eRegister_users',              []);
             notifications     = fsGet(fsData, 'notifications',      null,                           []);
             admissions        = fsGet(fsData, 'admissions',         'eRegister_admissions',         []);
@@ -1005,8 +1060,42 @@
             if(fsData && fsData['stopApp']) {
                 try { stopAppState = JSON.parse(fsData['stopApp']); } catch(e) {}
             }
+        }
 
-            SCHOOL_DOC.onSnapshot(snap => {
+        // Login successful hone ke baad call hota hai: SCHOOL_DOC ko us admin ke apne doc
+        // par point karta hai aur uska poora data (students/classes/fees/etc.) load karta hai.
+        async function loadAdminScopedData(adminCode) {
+            SCHOOL_DOC = getAdminDocRef(adminCode);
+            try {
+                let adminSnap = await SCHOOL_DOC.get();
+                if(!adminSnap.exists) {
+                    // One-time migration: yeh update lagne se PEHLE jo bhi data
+                    // eRegister/schoolData mein tha, woh sirf pehli baar login karne
+                    // wale admin ke naye, alag doc mein copy ho jaayega (sirf ek baar).
+                    let legacySnap = await REGISTRY_DOC.get();
+                    let legacy = legacySnap.exists ? legacySnap.data() : {};
+                    if(!legacy._legacyMigrated) {
+                        let migrateFields = ['admissions','admissions_cs','attendanceRecords','teachers','teacherAttendance',
+                            'examResults','feesColumns','feesData','classFeesStructure','editSettings','paymentHistory',
+                            'paymentHistory_cs','examFeesMonthWise','itemsFees','booksFees','admissionSettings','extraFeeColumns',
+                            'classList','freeStudentsList','billingSaved','selectedWallpaper','quickPayments','inventoryData',
+                            'admissionSeqNumber','qpSeqNumber','fcSeqNumber','adrSeqNumber','printSettings'];
+                        let toCopy = {};
+                        migrateFields.forEach(f => { if(legacy[f] !== undefined) toCopy[f] = legacy[f]; });
+                        if(Object.keys(toCopy).length > 0) { await SCHOOL_DOC.set(toCopy, { merge: true }); }
+                        await REGISTRY_DOC.set({ _legacyMigrated: true }, { merge: true });
+                    }
+                }
+            } catch(e) { console.warn('Legacy migration skipped:', e); }
+            let fsData = await fsLoadAll();
+            applyFsData(fsData);
+            window._lastFsData = fsData;
+        }
+
+        // Live listener: sirf GLOBAL registry fields (stopApp/notifications/coins/users/coAdmins)
+        // par real-time updates — yeh sab admins ke liye common hai, isliye REGISTRY_DOC par hi lagega.
+        function _attachRegistrySnapshotListener() {
+            REGISTRY_DOC.onSnapshot(snap => {
                 if(snap.exists()) {
                     let raw = snap.data();
                     if(raw.stopApp) { try { stopAppState = JSON.parse(raw.stopApp); } catch(e) {} }
@@ -1021,26 +1110,6 @@
                     }
                 }
             });
-
-            let integrityWarn = [];
-            if(!verifyChecksum(fsData, 'users'))      integrityWarn.push('users');
-            if(!verifyChecksum(fsData, 'admissions')) integrityWarn.push('admissions');
-            if(!verifyChecksum(fsData, 'paymentHistory')) integrityWarn.push('paymentHistory');
-            if(integrityWarn.length > 0) {
-                console.warn('[Security] Checksum mismatch for:', integrityWarn, '— Firebase data accepted (localStorage ignored)');
-            }
-
-            if(currentUser) {
-                let freshUser = users.find(u => u.code === currentUser.code);
-                if(freshUser && freshUser.blocked) {
-                    sessionStorage.removeItem('eRegister_currentUser');
-                    currentUser = null;
-                } else {
-                    setupSessionTimeout();
-                }
-            }
-
-            renderWelcome();
         }
 
         // ==================== WELCOME & LOGIN ====================
@@ -1118,7 +1187,7 @@
             }, 1200);
         }
 
-        function handleCoAdminLogin() {
+        async function handleCoAdminLogin() {
             if(stopAppState && stopAppState.active) {
                 let e=document.getElementById('loginError'); if(e){e.innerHTML='🔴 App is under maintenance.';e.classList.remove('hidden');}
                 return;
@@ -1134,6 +1203,7 @@
             const coAdminUser = { ...adminUser, name: ca.name, code: ca.code, designation: 'Co-Admin', isCoAdmin: true, adminCode: ca.adminCode, databaseName: ca.databaseName };
             currentUser = coAdminUser;
             sessionStorage.setItem('eRegister_currentUser', JSON.stringify(coAdminUser));
+            await loadAdminScopedData(ca.adminCode);
             const cm = coinsData;
             if(cm && cm[adminUser.code]) coinsData = cm[adminUser.code];
             else if(cm && cm.startDate) coinsData = cm;
@@ -1141,7 +1211,7 @@
             navigateTo(renderHome);
         }
 
-        function handleLogin() {
+        async function handleLogin() {
             if(stopAppState && stopAppState.active) {
                 let e = document.getElementById('loginError');
                 if(e) { e.innerHTML = '🔴 App is under maintenance. Please try again later.'; e.classList.remove('hidden'); }
@@ -1170,6 +1240,7 @@
                 }
                 currentUser=user;
                 sessionStorage.setItem('eRegister_currentUser', JSON.stringify(user));
+                await loadAdminScopedData(user.code);
                 setupSessionTimeout();
                 if(rawCoinsMap && rawCoinsMap[user.code]) {
                     coinsData = rawCoinsMap[user.code];
