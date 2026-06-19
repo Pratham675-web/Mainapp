@@ -161,6 +161,19 @@
             return 'ADR-' + String(_adrSeqNumber).padStart(4, '0');
         }
 
+        function peekNextQPNumber() {
+            let n = (_qpSeqNumber || 0) + 1;
+            return 'QP-' + String(n).padStart(4, '0');
+        }
+        function peekNextFCNumber() {
+            let n = (_fcSeqNumber || 0) + 1;
+            return 'FC-' + String(n).padStart(4, '0');
+        }
+        function peekNextADRNumber() {
+            let n = (_adrSeqNumber || 0) + 1;
+            return 'ADR-' + String(n).padStart(4, '0');
+        }
+
         function fsSave(field, value) {
             SCHOOL_DOC.set({ [field]: JSON.stringify(value) }, { merge: true })
                 .catch(e => console.warn('Firestore write failed:', e));
@@ -252,7 +265,7 @@
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; display: none; }
         .overlay.show { display: block; }
         .dashboard-container { padding: 40px; max-width: 1200px; margin: 0 auto; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; margin-bottom: 40px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 25px; margin-bottom: 40px; }
         .stat-card { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-radius: 24px; padding: 30px 25px; text-align: center; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
         .stat-card:hover { transform: translateY(-5px); }
         .btn-image { width: 90px; height: 90px; object-fit: contain; margin-bottom: 18px; display: block; margin-left: auto; margin-right: auto; background: transparent; }
@@ -564,7 +577,8 @@
         let editSettings = { balanceEditable: false };
         let paymentHistory = {};
         let examFeesMonthWise = {};
-        const defaultItemsList = ['Tie','Belt','Socks','I Card','Diary','Activity Charge','Entrance Test','Building Charge','Smart Class Charge','Registration'];
+        const defaultItemsList = ['Activity Charge','Entrance Test','Building Charge','Smart Class Charge','Registration'];
+        const inventoryOnlyItems = ['Tie','Belt','Shoes','Socks','I Card','Diary'];
         let itemsFees = {};
         let booksFees = {};
         let admissionSettings = { activityCharge: 0, entranceTest: 0, buildingCharge: 0, facultyCharge: 0, firstAidCharge: 0, smartClassCharge: 0, registrationCharge: 0, dresses: [] };
@@ -742,9 +756,13 @@
         }
         function addCoins(amount) {
             if(!coinsData) coinsData = { startDate: Date.now(), addedCoins: 0 };
-            coinsData.addedCoins = (coinsData.addedCoins || 0) + Math.max(0, parseInt(amount) || 0);
+            let n = Math.max(0, parseInt(amount) || 0);
+            coinsData.addedCoins = (coinsData.addedCoins || 0) + n;
             _saveUserCoins(currentUser && currentUser.code, coinsData);
             localStorage.setItem('eRegister_coins', JSON.stringify(coinsData));
+            // Track plan type based on coins added
+            if(n >= 300) localStorage.setItem('eRegister_plan_type', 'yearly');
+            else if(n >= 25) localStorage.setItem('eRegister_plan_type', 'monthly');
         }
         function _saveUserCoins(code, coinsObj) {
             if(!code) return;
@@ -961,6 +979,8 @@
             selectedWallpaper = fsGet(fsData, 'selectedWallpaper', 'eRegister_wallpaper', '');
             quickPayments     = fsGet(fsData, 'quickPayments',     'eRegister_quick_payments', []);
             if(!Array.isArray(quickPayments)) quickPayments = [];
+            window._inventoryData = fsGet(fsData, 'inventoryData', 'eRegister_inventory', []);
+            if(!Array.isArray(window._inventoryData)) window._inventoryData = [];
             let seqRaw = fsData && fsData['admissionSeqNumber'] ? fsData['admissionSeqNumber'] : (localStorage.getItem('eRegister_admission_seq') || '0');
             _admissionSeqNumber = parseInt(seqRaw) || 0;
             let qpSeqRaw = fsData && fsData['qpSeqNumber'] ? fsData['qpSeqNumber'] : (localStorage.getItem('eRegister_qp_seq') || '0');
@@ -1035,7 +1055,7 @@
             if(stopAppState && stopAppState.active) {
                 maintenanceBanner = `<div style="background:#dc2626;color:white;padding:14px 20px;border-radius:14px;margin-bottom:18px;font-weight:700;font-size:14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:10px;animation:pulse 2s ease-in-out infinite;"><i class="fas fa-tools"></i> App is under maintenance. Please try again later.</div>`;
             }
-            document.getElementById('app').innerHTML = `<div class="login-bg"><div class="card">${maintenanceBanner}<div class="logo-image"><img src="${img.loginLogo}"></div><h2>Welcome Back!</h2><p class="sub">Login to your e-Register account</p><div id="loginError" class="error hidden"></div><div class="input-group"><label><i class="fas fa-qrcode"></i> 6-Digit Code</label><input type="text" id="loginCode" maxlength="6" placeholder="Enter 6-digit code" oninput="this.value=this.value.replace(/[^0-9]/g,'');onLoginCodeInput()" ${stopAppState && stopAppState.active ? 'disabled style="opacity:0.5"' : ''}></div><div id="loginExtraFields"><div class="input-group"><label><i class="fas fa-lock"></i> Password</label><input type="password" id="loginPassword" placeholder="Enter your password" ${stopAppState && stopAppState.active ? 'disabled style="opacity:0.5"' : ''}></div><div class="input-group"><label><i class="fas fa-database"></i> Database Name</label><input type="text" id="loginDatabase" placeholder="e.g. SCHOOL1234@ABC" oninput="this.value=this.value.toUpperCase()" ${stopAppState && stopAppState.active ? 'disabled style="opacity:0.5"' : ''}></div><button class="btn btn-primary" onclick="handleLogin()" ${stopAppState && stopAppState.active ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}><i class="fas fa-sign-in-alt"></i> Login</button></div><div id="loginCoAdminFlow" style="display:none;"></div><div class="switch-link">Don't have an account? <a onclick="${stopAppState && stopAppState.active ? '' : 'renderSignup()'}">Create Account</a></div></div></div>`; 
+            document.getElementById('app').innerHTML = `<div class="login-bg"><div class="card">${maintenanceBanner}<div class="logo-image"><img src="${img.loginLogo}"></div><h2>Welcome Back!</h2><p class="sub">Login to your e-Register account</p><div id="loginError" class="error hidden"></div><div class="input-group"><label><i class="fas fa-qrcode"></i> 6-Digit Code</label><input type="text" id="loginCode" maxlength="6" placeholder="Enter 6-digit code" oninput="this.value=this.value.replace(/[^0-9]/g,'');onLoginCodeInput()" ${stopAppState && stopAppState.active ? 'disabled style="opacity:0.5"' : ''}></div><div id="loginExtraFields"><div class="input-group"><label><i class="fas fa-lock"></i> Password</label><input type="password" id="loginPassword" placeholder="Enter your password" ${stopAppState && stopAppState.active ? 'disabled style="opacity:0.5"' : ''}></div><div class="input-group"><label><i class="fas fa-database"></i> Database Name</label><input type="text" id="loginDatabase" placeholder="e.g. SCHOOL1234@ABC" oninput="this.value=this.value.toUpperCase()" ${stopAppState && stopAppState.active ? 'disabled style="opacity:0.5"' : ''}></div><button class="btn btn-primary" onclick="handleLogin()" ${stopAppState && stopAppState.active ? 'disabled style="opacity:0.5;cursor:not-allowed"' : ''}><i class="fas fa-sign-in-alt"></i> Login</button></div><div id="loginCoAdminFlow" style="display:none;"></div><div class="switch-link">Don't have an account? <a onclick="${stopAppState && stopAppState.active ? '' : 'renderSignup()'}">Create Account</a> &nbsp;|&nbsp; <a onclick="${stopAppState && stopAppState.active ? '' : 'renderForgetPassword()'}" style="color:#f97316;">Forget Password</a></div></div></div>`; 
         }
 
         function onLoginCodeInput() {
@@ -1170,6 +1190,96 @@
                 e.innerHTML='❌ Invalid code, password, or database name!'; 
                 e.classList.remove('hidden'); 
             } 
+        }
+
+        function renderForgetPassword() {
+            document.getElementById('app').innerHTML = `<div class="login-bg"><div class="card">
+                <div class="logo-image"><img src="${img.loginLogo}"></div>
+                <h2>Forget Password</h2>
+                <p class="sub">Reset your e-Register password</p>
+                <div id="fpError" class="error hidden"></div>
+                <div id="fpSuccess" class="success hidden"></div>
+                <div class="input-group">
+                    <label><i class="fas fa-qrcode"></i> 6-Digit ID</label>
+                    <input type="text" id="fpCode" maxlength="6" placeholder="Enter your 6-digit code" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+                </div>
+                <div class="input-group">
+                    <label><i class="fas fa-lock"></i> Old Password</label>
+                    <input type="password" id="fpOldPassword" placeholder="Enter your current password">
+                </div>
+                <div class="input-group">
+                    <label><i class="fas fa-lock"></i> New Password</label>
+                    <input type="password" id="fpNewPassword" placeholder="Enter new password (min 6 chars)">
+                </div>
+                <div class="input-group">
+                    <label><i class="fas fa-database"></i> Database Name</label>
+                    <input type="text" id="fpDatabase" placeholder="e.g. SCHOOL1234@ABC" oninput="this.value=this.value.toUpperCase()">
+                </div>
+                <div id="fpTimerBox" style="display:none;margin:14px 0;background:#fef3c7;border:1.5px solid #f59e0b;border-radius:14px;padding:14px;text-align:center;">
+                    <div style="font-size:13px;color:#b45309;font-weight:700;margin-bottom:6px;"><i class="fas fa-clock"></i> New password will activate in:</div>
+                    <div id="fpCountdown" style="font-size:28px;font-weight:800;color:#d97706;font-family:monospace;">30:00</div>
+                    <div style="font-size:12px;color:#92400e;margin-top:6px;">Please wait for the countdown to complete before logging in with new password.</div>
+                </div>
+                <button class="btn btn-primary" onclick="handleForgetPassword()" id="fpSubmitBtn"><i class="fas fa-key"></i> Reset Password</button>
+                <div class="switch-link"><a onclick="renderLogin()"><i class="fas fa-arrow-left"></i> Back to Login</a></div>
+            </div></div>`;
+
+            window.handleForgetPassword = function() {
+                let code = (document.getElementById('fpCode').value||'').trim();
+                let oldPwd = document.getElementById('fpOldPassword').value;
+                let newPwd = document.getElementById('fpNewPassword').value;
+                let dbInput = (document.getElementById('fpDatabase').value||'').trim().toUpperCase();
+                let errEl = document.getElementById('fpError');
+                let sucEl = document.getElementById('fpSuccess');
+                errEl.classList.add('hidden'); errEl.style.display='none';
+                sucEl.classList.add('hidden'); sucEl.style.display='none';
+                function showErr(msg){ errEl.innerHTML='❌ '+msg; errEl.classList.remove('hidden'); errEl.style.display='block'; }
+                if(!code||code.length!==6){ showErr('6-digit ID is required!'); return; }
+                if(!oldPwd){ showErr('Old password is required!'); return; }
+                if(!newPwd||newPwd.length<6){ showErr('New password must be at least 6 characters!'); return; }
+                if(!dbInput){ showErr('Database name is required!'); return; }
+                let user = users.find(u => u.code===code);
+                if(!user){ showErr('No account found with this ID!'); return; }
+                let userDb = (user.databaseName||user.organisation||'').toUpperCase();
+                if(userDb !== dbInput){ showErr('Database name does not match!'); return; }
+                if(user.password !== oldPwd){ showErr('Old password is incorrect!'); return; }
+                // Store pending password change with 30-minute timer
+                let activateAt = Date.now() + 30*60*1000;
+                user._pendingPassword = newPwd;
+                user._pendingPasswordActivateAt = activateAt;
+                fsSaveWithChecksum ? fsSaveWithChecksum('users', users) : fsSave('users', users);
+                localStorage.setItem('eRegister_users', JSON.stringify(users));
+                document.getElementById('fpSubmitBtn').disabled = true;
+                document.getElementById('fpTimerBox').style.display = 'block';
+                sucEl.innerHTML = '✅ Password reset initiated! New password will be active after 30 minutes.';
+                sucEl.classList.remove('hidden'); sucEl.style.display='block';
+                // Countdown timer
+                let timerInt = setInterval(() => {
+                    let remaining = activateAt - Date.now();
+                    if(remaining <= 0){
+                        clearInterval(timerInt);
+                        // Activate the new password
+                        let idx = users.findIndex(u => u.code===code);
+                        if(idx>=0){
+                            users[idx].password = users[idx]._pendingPassword;
+                            delete users[idx]._pendingPassword;
+                            delete users[idx]._pendingPasswordActivateAt;
+                            fsSaveWithChecksum ? fsSaveWithChecksum('users', users) : fsSave('users', users);
+                            localStorage.setItem('eRegister_users', JSON.stringify(users));
+                        }
+                        document.getElementById('fpCountdown').textContent = '00:00';
+                        document.getElementById('fpTimerBox').style.background = '#dcfce7';
+                        document.getElementById('fpTimerBox').style.borderColor = '#10b981';
+                        document.getElementById('fpCountdown').style.color = '#059669';
+                        sucEl.innerHTML = '✅ Password has been activated! You can now login with your new password.';
+                        return;
+                    }
+                    let mins = Math.floor(remaining / 60000);
+                    let secs = Math.floor((remaining % 60000) / 1000);
+                    let el = document.getElementById('fpCountdown');
+                    if(el) el.textContent = String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
+                }, 1000);
+            };
         }
 
         function showWelcomePopup() {
@@ -1336,7 +1446,7 @@
             document.getElementById('app').innerHTML = `<div class="home-bg"><div class="sticky-header">${getHeader('Home', false)}</div><div class="dashboard-container"><div class="stats-grid"><div class="stat-card" onclick="navigateTo(renderStudentAttendance)"><img class="btn-image" src="${img.studentAttendance}"><h4>Student Attendance</h4><p>Mark & view</p></div><div class="stat-card" onclick="navigateTo(renderTeacherAttendanceDashboard)"><img class="btn-image" src="${img.teacherAttendance}"><h4>Teacher Attendance</h4><p>Mark & view</p></div><div class="stat-card" onclick="navigateTo(renderSearchPage)"><img class="btn-image" src="${img.fees}"><h4>Search / Fees</h4><p>Students & fees</p></div><div class="stat-card" onclick="navigateTo(renderApproval)"><img class="btn-image" src="${img.approval}"><h4>Approval</h4><p>Approve admissions</p></div><div class="stat-card" onclick="navigateTo(renderAdmissionType)"><img class="btn-image" src="${img.newAdmission}"><h4>New Admission</h4><p>Register students</p></div><div class="stat-card" onclick="navigateTo(renderDefaulterList)"><img class="btn-image" src="https://i.ibb.co/V0J59wCm/defaulter-icon.png" onerror="this.src='${img.studentListIcon}'"><h4>Defaulter List</h4><p>Fee defaulters</p></div><div class="stat-card" onclick="navigateTo(renderDayBook)"><img class="btn-image" src="${img.dayBookIcon}" onerror="this.src='${img.dayBookIconFallback}'"><h4>Day Book</h4><p>Income & expense</p></div><div class="stat-card" onclick="navigateTo(renderInventory)"><img class="btn-image" src="${img.inventoryIcon}" onerror="this.src='${img.inventoryIconFallback}'"><h4>Inventory</h4><p>Manage items</p></div></div><div class="user-info"><i class="fas fa-info-circle" style="color:#667eea;font-size:24px;"></i><p>Welcome <strong>${currentUser.name}</strong>!<br>Logged in as <strong>${currentUser.designation}</strong><br><small>Code: ${currentUser.code}</small></p></div></div>${getOverlay()}</div>`;
             if(selectedWallpaper) {
                 let hbEl = document.querySelector('.home-bg');
-                if(hbEl) hbEl.style.backgroundImage = `url('${selectedWallpaper}')`;
+                if(hbEl) hbEl.style.backgroundImage = selectedWallpaper;
             }
             if(getCurrentCoins() <= 0) {
                 setTimeout(() => showExpiredOverlay(), 300);
@@ -1707,7 +1817,7 @@
                       <div class="plan-shine plan-shine-2"></div>
                       <div class="plan-badge">⚡ Monthly Plan</div>
                       <div class="plan-name">Monthly</div>
-                      <div class="plan-price"><span>₹</span>300</div>
+                      <div class="plan-price"><span>₹</span>700</div>
                       <ul class="plan-features">
                         <li>30 Coins included</li>
                         <li>Valid for 30 Days</li>
@@ -1724,16 +1834,34 @@
                       <div class="plan-best-tag">🏆 BEST VALUE</div>
                       <div class="plan-badge">🔥 Yearly Plan</div>
                       <div class="plan-name">Yearly</div>
-                      <div class="plan-price"><span>₹</span>3100</div>
+                      <div class="plan-price"><span>₹</span>7,500</div>
                       <ul class="plan-features">
                         <li>365 Coins included</li>
                         <li>Valid for 1 Full Year</li>
                         <li>Full access to all features</li>
                         <li>Priority support</li>
-                        <li>Save ₹500 vs monthly</li>
+                        <li>Save ₹900 vs monthly</li>
                       </ul>
                       <button class="plan-get-btn" onclick="navigateTo(renderSubscription, 'yearly')">
                         <i class="fas fa-crown"></i> Get Subscription
+                      </button>
+                    </div>
+                    <div class="plan-card plan-card-yearly" style="animation-delay:0.6s;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);">
+                      <div class="plan-shine"></div>
+                      <div class="plan-shine plan-shine-2"></div>
+                      <div class="plan-best-tag" style="background:linear-gradient(135deg,#f59e0b,#d97706);">💎 SUPER SAVE</div>
+                      <div class="plan-badge">🌟 2-Year Plan</div>
+                      <div class="plan-name">2-Year</div>
+                      <div class="plan-price"><span>₹</span>12,000</div>
+                      <ul class="plan-features">
+                        <li>730 Coins included</li>
+                        <li>Valid for 2 Full Years</li>
+                        <li>Full access to all features</li>
+                        <li>Priority support</li>
+                        <li>Save ₹4,800 vs monthly</li>
+                      </ul>
+                      <button class="plan-get-btn" onclick="navigateTo(renderSubscription, '2year')" style="background:linear-gradient(135deg,#f59e0b,#d97706);">
+                        <i class="fas fa-gem"></i> Get Subscription
                       </button>
                     </div>
                   </div>
@@ -1755,8 +1883,8 @@
         }
 
         function renderSubscription(plan) {
-            let planLabel = plan === 'yearly' ? 'Yearly Plan — ₹3,100' : 'Monthly Plan — ₹300';
-            let planCoins = plan === 'yearly' ? 365 : 30;
+            let planLabel = plan === 'yearly' ? 'Yearly Plan — ₹7,500' : plan === '2year' ? '2-Year Plan — ₹12,000' : 'Monthly Plan — ₹700';
+            let planCoins = plan === 'yearly' ? 365 : plan === '2year' ? 730 : 30;
             document.getElementById('app').innerHTML = `
             <div class="inner-bg"><div class="sticky-header">${getHeader('Subscribe', true)}</div>
             <div class="inner-container">
@@ -1801,7 +1929,7 @@
             
             let tableHeaders = '<th>#</th><th>Student Name</th><th>Date & Time</th><th>Month(s)</th>';
             feesColumns.forEach(col => { tableHeaders += `<th>${col}</th>`; });
-            tableHeaders += '<th>Exam Fees</th><th>Old Balance</th><th>Total</th><th style="background:#10b981;">Submitted Amount</th><th>Remark</th><th>Receipt</th>';
+            tableHeaders += '<th>Exam Fees</th><th>Old Balance</th><th>Total</th><th style="background:#10b981;">Submitted Amount</th><th>Receipt</th>';
             
             function makeEditable(studentIdField, memberId) {
                 let balanceSpan = document.getElementById(`balance_${memberId}`);
@@ -1957,11 +2085,11 @@
                             let examCellStyle = examFeeVal > 0 ? 'background:#fff3cd; font-weight:600; color:#b45309;' : '';
                             rowHtml += '<td style="' + examCellStyle + '">₹' + examFeeVal + '</td>';
                             let oldBalVal = isEverythingFree ? 0 : (trans.oldBalance !== undefined ? trans.oldBalance : 0);
-                            rowHtml += `<td>₹${oldBalVal}</td>`;
+                            let oldBalCell = oldBalVal < 0 ? `<span style="color:#10b981;font-weight:700;">+Advance ₹${Math.abs(oldBalVal)}</span>` : `₹${oldBalVal}`;
+                            rowHtml += `<td>${oldBalCell}</td>`;
                             if(mIdx === 0) {
                                 rowHtml += `<td rowspan="${rowCount}" style="vertical-align:middle;font-weight:700;">₹${combinedTotal}</td>`;
                                 rowHtml += `<td rowspan="${rowCount}" style="background:#dcfce7; font-weight:600; color:#059669; vertical-align:middle;">₹${group.submittedAmount || 0}</td>`;
-                                rowHtml += `<td rowspan="${rowCount}" style="vertical-align:middle;">${group.remark || ''}</td>`;
                                 // Receipt number for fees card entries - generate FC number
                                 let fcNum = getNextFCNumber();
                                 rowHtml += `<td rowspan="${rowCount}" style="vertical-align:middle;font-weight:700;color:#dc2626;">${fcNum}</td>`;
@@ -2460,9 +2588,17 @@
                         </div>
                         <span style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;background:${ca.blocked?'#fee2e2':'#dcfce7'};color:${ca.blocked?'#dc2626':'#16a34a'};">${ca.blocked?'Blocked':'Active'}</span>
                       </div>
-                      <div style="display:flex;gap:8px;margin-top:10px;">
-                        <button onclick="blockCoAdmin('${ca.code}',${!ca.blocked})" class="btn ${ca.blocked?'btn-success':'btn-danger'}" style="flex:1;font-size:12px;padding:8px;">${ca.blocked?'✅ Unblock':'🚫 Block'}</button>
-                        <button onclick="deleteCoAdmin('${ca.code}')" class="btn" style="flex:1;font-size:12px;padding:8px;background:#fee2e2;color:#dc2626;border:1.5px solid #fecaca;">🗑 Delete</button>
+                      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                        <button onclick="blockCoAdmin('${ca.code}',${!ca.blocked})" class="btn ${ca.blocked?'btn-success':'btn-danger'}" style="flex:1;font-size:12px;padding:8px;min-width:80px;">${ca.blocked?'✅ Unblock':'🚫 Block'}</button>
+                        <button onclick="showRenewCoAdminPassword('${ca.code}')" class="btn" style="flex:1;font-size:12px;padding:8px;min-width:80px;background:#e0e7ff;color:#4f46e5;border:1.5px solid #c7d2fe;">🔑 Renew Pwd</button>
+                        <button onclick="deleteCoAdmin('${ca.code}')" class="btn" style="flex:1;font-size:12px;padding:8px;min-width:80px;background:#fee2e2;color:#dc2626;border:1.5px solid #fecaca;">🗑 Delete</button>
+                      </div>
+                      <div id="renewPwdBox_${ca.code}" style="display:none;margin-top:10px;background:#f0f4ff;border-radius:12px;padding:12px;">
+                        <div style="font-size:12px;font-weight:700;color:#4f46e5;margin-bottom:8px;"><i class="fas fa-key"></i> Enter New 6-Digit Password</div>
+                        <div style="display:flex;gap:8px;">
+                          <input type="text" id="renewPwdInput_${ca.code}" maxlength="6" placeholder="6-digit password" oninput="this.value=this.value.replace(/[^0-9]/g,'')" style="flex:1;padding:8px;border:2px solid #c7d2fe;border-radius:10px;font-size:14px;font-family:monospace;">
+                          <button onclick="confirmRenewCoAdminPassword('${ca.code}')" style="padding:8px 14px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;">Save</button>
+                        </div>
                       </div>
                     </div>`).join('');
 
@@ -2545,6 +2681,22 @@
                 suc.innerHTML='✅ Co-admin created successfully! Refreshing page...'; suc.classList.remove('hidden'); suc.style.display='block';
                 setTimeout(()=>navigateTo(renderAccessibility), 1500);
             } catch(e) { showErr('Firebase error! Please try again.'); }
+        }
+
+        function showRenewCoAdminPassword(code) {
+            let box = document.getElementById('renewPwdBox_' + code);
+            if(box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function confirmRenewCoAdminPassword(code) {
+            let inp = document.getElementById('renewPwdInput_' + code);
+            let newPwd = inp ? inp.value.trim() : '';
+            if(!newPwd || newPwd.length !== 6) { showPopup('6-digit password required!', false); return; }
+            const updated = coAdmins.map(ca => ca.code === code ? {...ca, password: newPwd} : ca);
+            await fsSave('coAdmins', updated);
+            coAdmins = updated;
+            showPopup('✅ Co-admin password updated successfully!');
+            navigateTo(renderAccessibility);
         }
 
         async function blockCoAdmin(code, blockStatus) {
@@ -2728,7 +2880,66 @@
         }
         
         function renderSearchPage() {
-            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Search', true)}</div><div class="inner-container"><div class="form-card"><div class="two-column-layout"><div class="image-column"><img src="${img.searchPageBigIcon}" class="big-logo"></div><div class="form-column"><div class="form-title"><i class="fas fa-search"></i> Search Student</div><div class="search-section"><input type="text" id="searchQuery" class="search-input" placeholder="Search by Name, Mobile Number or Family Name..."><img src="${img.filterIcon}" class="filter-icon" onclick="toggleFilterDropdown()" style="cursor:pointer;"><input type="hidden" id="filterClassHidden" value="all"><button class="search-icon-btn" onclick="performSearch()"><img src="${img.searchIcon}"></button></div><div id="filterDropdown" class="filter-dropdown"><div onclick="selectFilterClass('all')">All Classes</div>${classList.map(c=>`<div onclick="selectFilterClass('${c}')">${c}</div>`).join('')}</div><div id="searchSpinner" class="spinner"></div><div id="searchResults"></div></div></div></div></div>${getOverlay()}</div>`;
+            let isYearly = localStorage.getItem('eRegister_plan_type') === 'yearly';
+            let receiptSearchSection = `<div style="margin-top:18px;border-top:1px solid #e5e7eb;padding-top:14px;">
+                    <div class="form-title" style="font-size:14px;margin-bottom:8px;"><i class="fas fa-receipt" style="color:#f97316;"></i> Search by Receipt Number</div>
+                    <div style="display:flex;gap:8px;align-items:center;position:relative;">
+                        <input type="text" id="receiptSearchInput" class="search-input" placeholder="Last 3-4 digits of receipt no..."
+                            style="flex:1;${isYearly ? '' : 'opacity:0.55;cursor:not-allowed;pointer-events:none;background:#f3f4f6;'}"
+                            ${isYearly ? 'onkeydown="if(event.key===\'Enter\') searchByReceiptDigits()"' : 'disabled readonly'}>
+                        <button class="search-icon-btn" onclick="${isYearly ? 'searchByReceiptDigits()' : ''}"
+                            style="background:linear-gradient(135deg,#f97316,#ea580c);${isYearly ? '' : 'opacity:0.45;cursor:not-allowed;'}"
+                            ${isYearly ? '' : 'disabled'}>
+                            <i class="fas fa-search" style="color:white;"></i>
+                        </button>
+                        ${!isYearly ? `<span style="position:absolute;right:50px;top:50%;transform:translateY(-50%);"><i class="fas fa-lock" style="color:#f59e0b;font-size:16px;"></i></span>` : ''}
+                    </div>
+                    ${!isYearly ? `<div style="margin-top:8px;background:linear-gradient(135deg,#fef3c7,#fffbeb);border:1.5px solid #fcd34d;border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;">
+                        <i class="fas fa-crown" style="color:#f59e0b;font-size:18px;flex-shrink:0;"></i>
+                        <div>
+                            <div style="font-weight:700;font-size:13px;color:#b45309;">Yearly Plan Required</div>
+                            <div style="font-size:11px;color:#92400e;margin-top:2px;">Receipt search is locked. Upgrade to Yearly or 2-Year Plan to enable this feature.</div>
+                        </div>
+                    </div>` : `<div style="font-size:12px;color:#888;margin-top:6px;"><i class="fas fa-info-circle"></i> Enter last 3-4 digits (e.g. type "0025" for FC-0025)</div>`}
+                    <div id="receiptSearchResult" style="margin-top:10px;"></div>
+                   </div>`;
+            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Search', true)}</div><div class="inner-container"><div class="form-card"><div class="two-column-layout"><div class="image-column"><img src="${img.searchPageBigIcon}" class="big-logo"></div><div class="form-column"><div class="form-title"><i class="fas fa-search"></i> Search Student</div><div class="search-section"><input type="text" id="searchQuery" class="search-input" placeholder="Search by Name, Mobile Number or Family Name..."><img src="${img.filterIcon}" class="filter-icon" onclick="toggleFilterDropdown()" style="cursor:pointer;"><input type="hidden" id="filterClassHidden" value="all"><button class="search-icon-btn" onclick="performSearch()"><img src="${img.searchIcon}"></button></div><div id="filterDropdown" class="filter-dropdown"><div onclick="selectFilterClass('all')">All Classes</div>${classList.map(c=>`<div onclick="selectFilterClass('${c}')">${c}</div>`).join('')}</div><div id="searchSpinner" class="spinner"></div><div id="searchResults"></div>${receiptSearchSection}</div></div></div></div>${getOverlay()}</div>`;
+        }
+
+        function searchByReceiptDigits() {
+            let query = (document.getElementById('receiptSearchInput')?.value || '').trim();
+            let resultDiv = document.getElementById('receiptSearchResult');
+            if(!resultDiv) return;
+            if(!query) { resultDiv.innerHTML = ''; return; }
+            let queryDigits = query.replace(/\D/g, '');
+            if(queryDigits.length < 3) {
+                resultDiv.innerHTML = '<div style="color:#f97316;font-size:13px;"><i class="fas fa-exclamation-circle"></i> Please enter at least 3 digits.</div>';
+                return;
+            }
+            let allStudents = getAllStudents();
+            let found = [];
+            allStudents.forEach(s => {
+                let hist = (paymentHistory[s.id] || []);
+                let matchRec = hist.find(h => {
+                    let rDigits = (h.receiptNo || h.receiptNumber || '').replace(/\D/g, '');
+                    return rDigits.endsWith(queryDigits);
+                });
+                if(matchRec) found.push({ student: s, receipt: matchRec });
+            });
+            if(found.length === 0) {
+                resultDiv.innerHTML = '<div style="color:#ef4444;font-size:13px;font-weight:600;"><i class="fas fa-times-circle"></i> No receipt found ending in "' + query + '"</div>';
+                return;
+            }
+            let html = found.map(f => {
+                let s = f.student; let h = f.receipt;
+                return `<div style="background:white;border:1.5px solid #10b981;border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;" onclick="navigateTo(viewFeesStructure,'${s.id}','${s.name}')">
+                    <div style="font-weight:700;color:#10b981;font-size:13px;"><i class="fas fa-check-circle"></i> Receipt: ${h.receiptNo || h.receiptNumber || '—'}</div>
+                    <div style="font-size:13px;margin-top:4px;"><strong>${s.name}</strong> &nbsp; Class: ${s.className || '—'}</div>
+                    <div style="font-size:12px;color:#555;">Submitted: ₹${h.submittedAmount || h.amount || 0} &nbsp; Balance: ₹${h.balance || 0} &nbsp; Date: ${h.date ? new Date(h.date).toLocaleDateString('en-IN') : '—'}</div>
+                    <div style="font-size:11px;color:#667eea;margin-top:4px;"><i class="fas fa-arrow-right"></i> Tap to view & submit fees</div>
+                </div>`;
+            }).join('');
+            resultDiv.innerHTML = html;
         }
 
         function performSearch() {
@@ -2994,7 +3205,7 @@
                         let isFixed = col.toLowerCase().replace(/\s+/g,'') === 'tuitionfees';
                         let value = '';
                         if(isFixed) {
-                            value = isTuitionFree ? 0 : tuitionFee * multiplier;
+                            value = (isTuitionFree || selectedMonths.length === 0) ? 0 : tuitionFee * multiplier;
                         } else {
                             if(isAdditionalFree) {
                                 value = 0;
@@ -3056,6 +3267,7 @@
             window._updateMOP = function() {
                 let labels = ['mopCashLabel','mopPaytmLabel','mopBothLabel'];
                 let colors = ['#10b981','#00baf2','#f59e0b'];
+                let isBoth = false;
                 labels.forEach((id, i) => {
                     let el = document.getElementById(id);
                     if(el) {
@@ -3063,9 +3275,9 @@
                         if(radio && radio.checked) {
                             el.style.borderColor = colors[i];
                             el.style.background = colors[i] + '15';
-                            // Show/hide cash+paytm sub-fields
                             if(id === 'mopBothLabel') {
                                 document.getElementById('mopSubFields').style.display = 'block';
+                                isBoth = true;
                             }
                         } else {
                             el.style.borderColor = '#e0e0e0';
@@ -3076,6 +3288,10 @@
                         }
                     }
                 });
+                // When Cash & Paytm: hide submitted amount row (auto-calc from inputs)
+                let submRow = document.getElementById('submittedAmountRow');
+                if(submRow) submRow.style.display = isBoth ? 'none' : '';
+                calculateTotal();
             };
 
             window.calculateTotal = () => {
@@ -3088,35 +3304,46 @@
                 let finalGrandTotal = grandTotal + oldBalance;
                 let discInput = parseFloat(document.getElementById('discountAmount').value) || 0;
                 let discount = (window._discMode === 'percent') ? Math.round(finalGrandTotal * discInput / 100) : discInput;
-                let submittedAmount = parseFloat(document.getElementById('submittedAmount').value) || 0;
                 let afterDiscount = finalGrandTotal - discount;
-                let balance = afterDiscount - submittedAmount;
-                let finalBalance = balance >= 0 ? balance : 0;
-                
-                document.getElementById('grandTotal').innerText = finalGrandTotal;
-                document.getElementById('afterDiscount').innerText = afterDiscount;
-                document.getElementById('balanceAmount').innerText = finalBalance;
-                
+
                 // Check if Cash & Paytm mode is selected
                 let mopRadios = document.querySelectorAll('input[name="modeOfPayment"]');
                 let selectedMOP = '';
                 for(let r of mopRadios) { if(r.checked) { selectedMOP = r.value; break; } }
-                let totalSubmitted = submittedAmount;
+                let submittedAmount = 0;
                 if(selectedMOP === 'Cash & Paytm') {
                     let cashAmt = parseFloat(document.getElementById('mopCashAmount')?.value) || 0;
                     let paytmAmt = parseFloat(document.getElementById('mopPaytmAmount')?.value) || 0;
-                    totalSubmitted = cashAmt + paytmAmt;
-                    document.getElementById('submittedAmount').value = totalSubmitted;
-                    document.getElementById('mopTotalDisplay').innerText = '₹' + totalSubmitted;
+                    submittedAmount = cashAmt + paytmAmt;
+                    let sEl = document.getElementById('submittedAmount');
+                    if(sEl) sEl.value = submittedAmount;
+                    let mopTotEl = document.getElementById('mopTotalDisplay');
+                    if(mopTotEl) mopTotEl.innerText = '₹' + submittedAmount;
+                } else {
+                    submittedAmount = parseFloat(document.getElementById('submittedAmount')?.value) || 0;
                 }
+
+                let balance = afterDiscount - submittedAmount;
                 
+                document.getElementById('grandTotal').innerText = finalGrandTotal;
+                document.getElementById('afterDiscount').innerText = afterDiscount;
+
+                let balLabel = document.getElementById('fcBalanceLabel');
+                let balEl = document.getElementById('balanceAmount');
                 let balanceMsg = document.getElementById('balanceMessage');
-                if(balanceMsg) {
-                    if(finalBalance === 0) {
-                        balanceMsg.innerHTML = '<span class="balance-clear"><i class="fas fa-check-circle"></i> Balance Clear</span>';
-                    } else {
-                        balanceMsg.innerHTML = '';
-                    }
+
+                if(balance < 0) {
+                    if(balLabel) balLabel.innerHTML = '<span style="color:#10b981;font-weight:700;"><i class="fas fa-plus-circle"></i> Advance:</span>';
+                    if(balEl) { balEl.innerText = '₹' + Math.abs(balance); balEl.style.color = '#10b981'; }
+                    if(balanceMsg) balanceMsg.innerHTML = '<span style="color:#10b981;font-size:12px;font-weight:600;"><i class="fas fa-check-circle"></i> Advance Amount</span>';
+                } else if(balance === 0) {
+                    if(balLabel) balLabel.innerHTML = 'Balance:';
+                    if(balEl) { balEl.innerText = '0'; balEl.style.color = ''; }
+                    if(balanceMsg) balanceMsg.innerHTML = '<span class="balance-clear"><i class="fas fa-check-circle"></i> Balance Clear</span>';
+                } else {
+                    if(balLabel) balLabel.innerHTML = 'Balance:';
+                    if(balEl) { balEl.innerText = balance; balEl.style.color = ''; }
+                    if(balanceMsg) balanceMsg.innerHTML = '';
                 }
             };
 
@@ -3253,32 +3480,32 @@
                         <input type="number" id="discountAmount" placeholder="0" style="width:120px;" oninput="calculateTotal()">
                     </div>
                     <div class="calculation-row"><span>After Discount:</span><span id="afterDiscount">0</span></div>
-                    <div class="calculation-row"><span>Submitted Amount:</span><input type="number" id="submittedAmount" placeholder="0" style="width:120px;" oninput="calculateTotal()"></div>
-                    <div class="calculation-row"><span>Balance:</span><span id="balanceAmount" class="balance-text">0</span><span id="balanceMessage"></span></div>
-                </div>
-                <div style="background:#f8f9ff;border-radius:16px;padding:16px;margin:12px 0;border:2px solid #e0e7ff;">
-                    <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-bottom:10px;"><i class="fas fa-credit-card" style="color:#667eea;"></i> Mode of Payment</div>
-                    <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                        <label style="display:flex;align-items:center;gap:7px;padding:9px 18px;border:2px solid #e0e0e0;border-radius:20px;cursor:pointer;background:white;font-size:13px;font-weight:600;transition:0.2s;" id="mopCashLabel">
-                            <input type="radio" name="modeOfPayment" value="Cash" id="mopCash" style="width:16px;height:16px;accent-color:#10b981;" onchange="window._updateMOP()">
-                            <i class="fas fa-money-bill-wave" style="color:#10b981;"></i> Cash
-                        </label>
-                        <label style="display:flex;align-items:center;gap:7px;padding:9px 18px;border:2px solid #e0e0e0;border-radius:20px;cursor:pointer;background:white;font-size:13px;font-weight:600;transition:0.2s;" id="mopPaytmLabel">
-                            <input type="radio" name="modeOfPayment" value="Paytm" id="mopPaytm" style="width:16px;height:16px;accent-color:#00baf2;" onchange="window._updateMOP()">
-                            <i class="fas fa-mobile-alt" style="color:#00baf2;"></i> Paytm / UPI
-                        </label>
-                        <label style="display:flex;align-items:center;gap:7px;padding:9px 18px;border:2px solid #e0e0e0;border-radius:20px;cursor:pointer;background:white;font-size:13px;font-weight:600;transition:0.2s;" id="mopBothLabel">
-                            <input type="radio" name="modeOfPayment" value="Cash & Paytm" id="mopBoth" style="width:16px;height:16px;accent-color:#f59e0b;" onchange="window._updateMOP()">
-                            <i class="fas fa-exchange-alt" style="color:#f59e0b;"></i> Cash & Paytm
-                        </label>
-                    </div>
-                    <div id="mopSubFields" style="display:none;margin-top:12px;padding:12px;background:#fef3c7;border-radius:12px;border:1px solid #f59e0b;">
-                        <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;">
-                            <div><label style="font-size:13px;font-weight:600;">Cash Amount:</label> <input type="number" id="mopCashAmount" placeholder="0" style="width:100px;padding:6px;border:2px solid #10b981;border-radius:8px;" oninput="window._mopSubUpdate()"></div>
-                            <div><label style="font-size:13px;font-weight:600;">Paytm Amount:</label> <input type="number" id="mopPaytmAmount" placeholder="0" style="width:100px;padding:6px;border:2px solid #00baf2;border-radius:8px;" oninput="window._mopSubUpdate()"></div>
-                            <div style="font-weight:700;color:#1a1a2e;">Total: <span id="mopTotalDisplay">₹0</span></div>
+                    <div style="padding:10px 0 6px;border-top:1px dashed #e0e7ff;margin:6px 0 2px;">
+                        <div style="font-size:13px;font-weight:700;color:#1a1a2e;margin-bottom:8px;"><i class="fas fa-credit-card" style="color:#667eea;"></i> Mode of Payment</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <label style="display:flex;align-items:center;gap:7px;padding:9px 18px;border:2px solid #e0e0e0;border-radius:20px;cursor:pointer;background:white;font-size:13px;font-weight:600;transition:0.2s;" id="mopCashLabel">
+                                <input type="radio" name="modeOfPayment" value="Cash" id="mopCash" style="width:16px;height:16px;accent-color:#10b981;" onchange="window._updateMOP()">
+                                <i class="fas fa-money-bill-wave" style="color:#10b981;"></i> Cash
+                            </label>
+                            <label style="display:flex;align-items:center;gap:7px;padding:9px 18px;border:2px solid #e0e0e0;border-radius:20px;cursor:pointer;background:white;font-size:13px;font-weight:600;transition:0.2s;" id="mopPaytmLabel">
+                                <input type="radio" name="modeOfPayment" value="Paytm" id="mopPaytm" style="width:16px;height:16px;accent-color:#00baf2;" onchange="window._updateMOP()">
+                                <i class="fas fa-mobile-alt" style="color:#00baf2;"></i> Paytm / UPI
+                            </label>
+                            <label style="display:flex;align-items:center;gap:7px;padding:9px 18px;border:2px solid #e0e0e0;border-radius:20px;cursor:pointer;background:white;font-size:13px;font-weight:600;transition:0.2s;" id="mopBothLabel">
+                                <input type="radio" name="modeOfPayment" value="Cash & Paytm" id="mopBoth" style="width:16px;height:16px;accent-color:#f59e0b;" onchange="window._updateMOP()">
+                                <i class="fas fa-exchange-alt" style="color:#f59e0b;"></i> Cash & Paytm
+                            </label>
+                        </div>
+                        <div id="mopSubFields" style="display:none;margin-top:10px;padding:10px;background:#fef3c7;border-radius:10px;border:1px solid #f59e0b;">
+                            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+                                <div><label style="font-size:13px;font-weight:600;">Cash (₹):</label> <input type="number" id="mopCashAmount" placeholder="0" style="width:90px;padding:6px;border:2px solid #10b981;border-radius:8px;" oninput="window._mopSubUpdate()"></div>
+                                <div><label style="font-size:13px;font-weight:600;">Paytm (₹):</label> <input type="number" id="mopPaytmAmount" placeholder="0" style="width:90px;padding:6px;border:2px solid #00baf2;border-radius:8px;" oninput="window._mopSubUpdate()"></div>
+                                <div style="font-weight:700;color:#1a1a2e;">Total: <span id="mopTotalDisplay">₹0</span></div>
+                            </div>
                         </div>
                     </div>
+                    <div id="submittedAmountRow" class="calculation-row"><span>Submitted Amount:</span><input type="number" id="submittedAmount" placeholder="0" style="width:120px;" oninput="calculateTotal()"></div>
+                    <div class="calculation-row"><span id="fcBalanceLabel" style="font-weight:700;">Balance:</span><span id="balanceAmount" class="balance-text">0</span><span id="balanceMessage"></span></div>
                 </div>
                 <div class="input-group"><label><i class="fas fa-comment"></i> Remark</label><textarea id="remarkText" rows="2" placeholder="Enter remark here..."></textarea></div>
                 <button id="saveFeesBtn" class="btn btn-success" style="margin-top:20px; width:100%;" onclick="saveFeesData()"><i class="fas fa-save"></i> Save Fees <span id="saveSpinner" class="spinner" style="display:none; width:20px; height:20px;"></span></button>
@@ -3494,60 +3721,109 @@
         // ==================== DEFAULTER LIST ====================
         function renderDefaulterList() {
             let students = getAllStudents();
-            let periods = [
-                { label: 'This Month', months: 1 },
-                { label: 'Last 2 Months', months: 2 },
-                { label: 'Last 6 Months', months: 6 },
-                { label: 'Last 1 Year', months: 12 },
-                { label: 'Last 2 Years', months: 24 },
-                { label: 'Last 3 Years', months: 36 }
-            ];
             let now = new Date();
-            let currentPeriodMonths = parseInt(localStorage.getItem('eRegister_defaulter_period') || '1');
+            let nowYear = now.getFullYear();
+            let nowMonth = now.getMonth(); // 0-indexed
 
-            function buildDefaulterList(periodMonths) {
-                localStorage.setItem('eRegister_defaulter_period', periodMonths);
-                let cutoff = new Date(now.getFullYear(), now.getMonth() - periodMonths + 1, 1);
+            function buildDefaulterList(searchQuery) {
+                searchQuery = (searchQuery || '').toLowerCase().trim();
                 let classMap = {};
                 students.forEach(s => {
-                    let hist = paymentHistory[s.id] || [];
-                    let paidInPeriod = hist.some(h => {
+                    let hist = (paymentHistory[s.id] || []).slice();
+                    // Defaulter = student with NO payment in current month
+                    let paidThisMonth = hist.some(h => {
                         let d = new Date(h.date);
-                        return d >= cutoff && (h.submittedAmount > 0 || h.amount > 0);
+                        return d.getFullYear() === nowYear && d.getMonth() === nowMonth && (h.submittedAmount > 0 || h.amount > 0);
                     });
-                    if(!paidInPeriod) {
+                    if(!paidThisMonth) {
                         let cls = s.className || 'Unknown';
                         if(!classMap[cls]) classMap[cls] = [];
                         let bal = 0;
                         hist.forEach(h => { bal += (parseFloat(h.balance) || 0); });
-                        classMap[cls].push({ ...s, pendingBal: bal });
+
+                        // Find last paid entry (most recent with submittedAmount > 0)
+                        let paidEntries = hist.filter(h => (h.submittedAmount > 0 || h.amount > 0));
+                        let lastPaidMonths = [];
+                        let lastPaidDate = null;
+                        if(paidEntries.length > 0) {
+                            paidEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+                            lastPaidMonths = paidEntries[0].months || [];
+                            lastPaidDate = new Date(paidEntries[0].date);
+                        }
+
+                        // Compute unpaid months from last paid to now (full history)
+                        let unpaidMonths = [];
+                        if(lastPaidDate && lastPaidMonths.length > 0) {
+                            let lastMonthName = lastPaidMonths[lastPaidMonths.length - 1];
+                            let lastMonthIdx = months.indexOf(lastMonthName);
+                            let lastYear = lastPaidDate.getFullYear();
+                            if(lastMonthIdx >= 0) {
+                                let y = lastYear;
+                                let m = lastMonthIdx + 1;
+                                if(m > 11) { m = 0; y++; }
+                                while(y < nowYear || (y === nowYear && m <= nowMonth)) {
+                                    unpaidMonths.push(months[m]);
+                                    m++;
+                                    if(m > 11) { m = 0; y++; }
+                                }
+                            }
+                        }
+
+                        classMap[cls].push({ ...s, pendingBal: bal, lastPaidMonths, unpaidMonths });
                     }
                 });
+
+                // Apply search filter if any
+                if(searchQuery) {
+                    Object.keys(classMap).forEach(cls => {
+                        classMap[cls] = classMap[cls].filter(s =>
+                            (s.name || '').toLowerCase().includes(searchQuery) ||
+                            (s.admissionNumber || '').toLowerCase().includes(searchQuery)
+                        );
+                        if(classMap[cls].length === 0) delete classMap[cls];
+                    });
+                }
+
                 let total = Object.values(classMap).reduce((a, v) => a + v.length, 0);
                 let listHtml = total === 0
-                    ? '<div style="text-align:center;padding:40px;"><i class="fas fa-check-circle" style="font-size:48px;color:#10b981;"></i><p style="color:#10b981;font-weight:700;font-size:16px;margin-top:12px;">Koi defaulter nahi! Sab payments up-to-date hain.</p></div>'
+                    ? `<div style="text-align:center;padding:40px;"><i class="fas fa-check-circle" style="font-size:48px;color:#10b981;"></i><p style="color:#10b981;font-weight:700;font-size:16px;margin-top:12px;">${searchQuery ? 'Koi result nahi mila.' : 'Koi defaulter nahi! Sab payments up-to-date hain.'}</p></div>`
                     : Object.entries(classMap).sort(([a],[b])=>a.localeCompare(b)).map(([cls, sts]) => `
                         <div style="margin-bottom:18px;">
                             <div style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:10px 18px;border-radius:12px 12px 0 0;font-weight:700;font-size:14px;">
                                 <i class="fas fa-chalkboard"></i> ${cls} <span style="background:rgba(255,255,255,0.25);padding:2px 10px;border-radius:20px;margin-left:8px;">${sts.length} students</span>
                             </div>
-                            ${sts.map(s => `<div style="background:white;border:1px solid #e0e0e0;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;border-top:none;cursor:pointer;" onclick="navigateTo(viewFeesStructure,'${s.id}','${s.name}')">
-                                <div>
-                                    <div style="font-weight:600;font-size:14px;"><i class="fas fa-user" style="color:#ef4444;"></i> ${s.name} ${s.admissionNumber ? `<span style="background:#e0e7ff;color:#667eea;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:700;">${s.admissionNumber}</span>` : ''}</div>
-                                    <div style="font-size:12px;color:#666;"><i class="fas fa-phone"></i> ${s.contact}</div>
-                                </div>
-                                <div style="text-align:right;">
-                                    ${s.pendingBal > 0 ? `<div style="background:#fef2f2;color:#ef4444;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;">₹${s.pendingBal} balance</div>` : ''}
-                                    <i class="fas fa-chevron-right" style="color:#667eea;margin-top:4px;"></i>
+                            ${sts.map(s => `<div style="background:white;border:1px solid #e0e0e0;padding:12px 18px;border-top:none;cursor:pointer;" onclick="navigateTo(viewFeesStructure,'${s.id}','${s.name}')">
+                                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                                    <div style="flex:1;">
+                                        <div style="font-weight:700;font-size:14px;margin-bottom:3px;">
+                                            <i class="fas fa-user" style="color:#ef4444;"></i> ${s.name}
+                                            ${s.rollNo ? `<span style="background:#e0e7ff;color:#667eea;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:700;margin-left:6px;">Roll: ${s.rollNo}</span>` : ''}
+                                            ${s.admissionNumber ? `<span style="background:#fef3c7;color:#b45309;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:700;margin-left:4px;">${s.admissionNumber}</span>` : ''}
+                                        </div>
+                                        <div style="font-size:12px;color:#555;margin-bottom:4px;">
+                                            <i class="fas fa-male" style="color:#667eea;"></i> Father: <strong>${s.fatherName || 'N/A'}</strong>
+                                            &nbsp;&nbsp;<i class="fas fa-phone" style="color:#10b981;"></i> ${s.contact || '—'}
+                                        </div>
+                                        <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:3px;align-items:center;">
+                                            ${s.lastPaidMonths.length > 0 ? s.lastPaidMonths.map(mo => `<span style="background:#10b981;color:white;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${mo}</span>`).join('') : ''}
+                                            ${s.unpaidMonths.length > 0 ? s.unpaidMonths.map(mo => `<span style="background:#ef4444;color:white;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${mo}</span>`).join('') : (s.lastPaidMonths.length === 0 ? '<span style="font-size:10px;color:#999;">No payment history</span>' : '')}
+                                        </div>
+                                    </div>
+                                    <div style="text-align:right;margin-left:12px;">
+                                        ${s.pendingBal > 0 ? `<div style="background:#fef2f2;color:#ef4444;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;margin-bottom:4px;">₹${s.pendingBal} due</div>` : ''}
+                                        <i class="fas fa-chevron-right" style="color:#667eea;"></i>
+                                    </div>
                                 </div>
                             </div>`).join('')}
                         </div>`).join('');
 
-                let periodBtns = periods.map(p => `<button onclick="buildDefaulterList(${p.months})" style="padding:8px 16px;border:2px solid ${periodMonths===p.months?'#667eea':'#e0e0e0'};border-radius:20px;background:${periodMonths===p.months?'linear-gradient(135deg,#667eea,#764ba2)':'white'};color:${periodMonths===p.months?'white':'#333'};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">${p.label}</button>`).join('');
-
                 document.getElementById('defaulterContainer').innerHTML = `
-                    <div style="font-size:13px;color:#666;margin-bottom:8px;">Kin students ne <strong>is period mein koi payment nahi ki</strong>:</div>
-                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;">${periodBtns}</div>
+                    <div style="margin-bottom:14px;">
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input type="text" id="defaulterSearch" class="search-input" placeholder="Search by Name or Admission Number..." oninput="buildDefaulterList(this.value)" style="flex:1;font-size:13px;padding:8px 14px;">
+                        </div>
+                        <div style="margin-top:8px;font-size:12px;color:#888;"><i class="fas fa-info-circle"></i> Showing students who have not paid this month (all history)</div>
+                    </div>
                     <div style="margin-bottom:10px;font-weight:700;font-size:15px;color:#ef4444;"><i class="fas fa-exclamation-triangle"></i> ${total} Defaulter${total!==1?'s':''} Found</div>
                     ${listHtml}`;
                 window.buildDefaulterList = buildDefaulterList;
@@ -3557,7 +3833,7 @@
                 <div class="form-title"><i class="fas fa-exclamation-triangle" style="color:#ef4444;"></i> Fee Defaulter List</div>
                 <div id="defaulterContainer" style="padding:4px 0;"></div>
             </div></div>${getOverlay()}</div>`;
-            buildDefaulterList(currentPeriodMonths);
+            buildDefaulterList('');
             window.buildDefaulterList = buildDefaulterList;
         }
 
@@ -4110,6 +4386,17 @@
                         <span style="font-weight:700;color:#667eea;">₹${price}</span>
                     </div>`;
                 });
+                // Add inventory items to the list
+                (window._inventoryData || []).forEach((inv, invIdx) => {
+                    let invPrice = inv.price || 0;
+                    let invQtyBadge = inv.qty > 0
+                        ? `<span style="font-size:11px;background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:10px;margin-right:6px;">Stock: ${inv.qty}</span>`
+                        : `<span style="font-size:11px;background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:10px;margin-right:6px;">Out of stock</span>`;
+                    listHtml += `<div onclick="addItemToBilling_detail('${inv.name}', ${invPrice})" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #f0f0f0;cursor:pointer;border-radius:12px;transition:0.2s;" onmouseover="this.style.background='#f0f0f0'" onmouseout="this.style.background='white'">
+                        <span style="font-weight:500;"><i class="fas fa-box" style="color:#667eea;font-size:11px;margin-right:5px;"></i> ${inv.name}</span>
+                        <span>${invQtyBadge}<span style="font-weight:700;color:#667eea;">₹${invPrice}</span></span>
+                    </div>`;
+                });
                 (admissionSettings.dresses||[]).forEach((dr, di) => {
                     let colorOptions = (dr.color||'').split(',').map(c=>`<option value="${c.trim()}">${c.trim()}</option>`).join('');
                     listHtml += `<div style="padding:14px 16px;border-bottom:1px solid #f0f0f0;border-radius:12px;">
@@ -4224,6 +4511,23 @@
                         });
                     }
                 });
+                // Deduct saved billing items from inventory
+                if(window._inventoryData && window._inventoryData.length > 0) {
+                    let invChanged = false;
+                    rows.forEach(row => {
+                        let itemName = (row.name||'').toLowerCase().trim();
+                        let itemQty = parseInt(row.qty) || 1;
+                        let invIdx = window._inventoryData.findIndex(inv => (inv.name||'').toLowerCase().trim() === itemName);
+                        if(invIdx >= 0 && window._inventoryData[invIdx].qty > 0) {
+                            window._inventoryData[invIdx].qty = Math.max(0, window._inventoryData[invIdx].qty - itemQty);
+                            invChanged = true;
+                        }
+                    });
+                    if(invChanged) {
+                        fsSave('inventoryData', window._inventoryData);
+                        localStorage.setItem('eRegister_inventory', JSON.stringify(window._inventoryData));
+                    }
+                }
                 let grandTotalRaw = parseFloat((document.getElementById('bilGrandTotal')?.textContent||'0').replace('₹','')) || 0;
                 let submittedRaw = parseFloat(document.getElementById('bilSubmitted')?.value || '0') || 0;
                 let balanceRaw = parseFloat((document.getElementById('bilBalance')?.textContent||'0').replace('₹','')) || 0;
@@ -4355,21 +4659,25 @@
 
         // ==================== ADMISSION SETTINGS ====================
         function renderAdmissionSettings() {
+            let dressDeleteMode = false;
+
             function renderDressRows() {
                 let dressHtml = '';
                 (admissionSettings.dresses||[]).forEach((dr, di) => {
-                    dressHtml += `<tr id="admDressRow_${di}">
-                        <td style="padding:10px;"><input type="text" id="dressName_${di}" value="${dr.name||''}" placeholder="Dress name" style="width:100%;padding:8px;border:2px solid #e0e0e0;border-radius:10px;font-size:14px;" readonly></td>
-                        <td style="padding:10px;"><input type="text" id="dressColor_${di}" value="${dr.color||''}" placeholder="e.g. Blue,White,Red" style="width:100%;padding:8px;border:2px solid #e0e0e0;border-radius:10px;font-size:14px;" readonly></td>
-                        <td style="padding:10px;"><input type="number" id="dressPrice_${di}" value="${dr.price||0}" placeholder="0" style="width:100%;padding:8px;border:2px solid #e0e0e0;border-radius:10px;font-size:14px;" readonly></td>
+                    dressHtml += `<tr id="admDressRow_${di}" style="background:${di%2===0?'white':'#f9fafb'};">
                         <td style="padding:10px;text-align:center;">
-                            <button onclick="toggleDressEdit(${di})" style="background:none;border:none;cursor:pointer;" id="dressEditBtn_${di}"><img src="${img.editIcon}" style="width:38px;height:38px;"></button>
-                            <button onclick="deleteDressRow(${di})" style="background:none;border:none;cursor:pointer;"><img src="${img.deleteIcon}" style="width:30px;height:30px;"></button>
+                            <input type="checkbox" class="dress-del-check" data-di="${di}" style="width:18px;height:18px;cursor:pointer;display:${dressDeleteMode?'inline-block':'none'};accent-color:#ef4444;">
+                            <span class="dress-sn-label" style="font-weight:600;color:#667eea;display:${dressDeleteMode?'none':'inline'};">${di+1}</span>
+                        </td>
+                        <td style="padding:10px;font-size:14px;font-weight:500;">${dr.name||''}</td>
+                        <td style="padding:10px;">
+                            <input type="number" id="dressPrice_${di}" value="${dr.price||0}" placeholder="0"
+                                style="width:100%;padding:8px;border:2px solid #e0e0e0;border-radius:10px;font-size:14px;">
                         </td>
                     </tr>`;
                 });
                 let container = document.getElementById('dressTableBody');
-                if (container) container.innerHTML = dressHtml;
+                if (container) container.innerHTML = dressHtml || '<tr><td colspan="3" style="padding:24px;text-align:center;color:#999;">No dress entries yet. Click ✏️ to add.</td></tr>';
             }
 
             document.getElementById('app').innerHTML = `
@@ -4379,71 +4687,110 @@
                     <div class="form-card">
                         <div class="form-title"><i class="fas fa-tshirt"></i> Dress Setting</div>
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-                            <h3 style="font-size:18px;font-weight:700;color:#1a1a2e;"><i class="fas fa-tshirt" style="color:#667eea;"></i> Dress Settings</h3>
-                            <button onclick="addDressRow()" style="background:none;border:none;cursor:pointer;" title="Add Dress"><img src="${img.plusIcon}" style="width:42px;height:42px;"></button>
+                            <h3 style="font-size:18px;font-weight:700;color:#1a1a2e;"><i class="fas fa-tshirt" style="color:#667eea;"></i> Dress List</h3>
+                            <div style="display:flex;gap:10px;align-items:center;">
+                                <button onclick="openAddDressPopup()" style="background:none;border:none;cursor:pointer;" title="Add new dress">
+                                    <img src="${img.editIcon}" style="width:42px;height:42px;">
+                                </button>
+                                <button onclick="toggleDressDeleteMode()" id="dressDeleteModeBtn" style="background:none;border:none;cursor:pointer;" title="Delete dresses">
+                                    <img src="${img.deleteIcon}" style="width:36px;height:36px;">
+                                </button>
+                            </div>
                         </div>
                         <div style="overflow-x:auto;">
-                        <table style="width:100%;border-collapse:collapse;">
+                        <table style="width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;">
                             <thead><tr style="background:#667eea;color:white;">
+                                <th style="padding:12px;text-align:center;width:60px;">Sn.</th>
                                 <th style="padding:12px;text-align:left;">Dress Name</th>
-                                <th style="padding:12px;text-align:left;">Color(s) (comma separated)</th>
-                                <th style="padding:12px;text-align:left;">Price (₹)</th>
-                                <th style="padding:12px;text-align:center;">Action</th>
+                                <th style="padding:12px;text-align:left;min-width:130px;">Price (₹)</th>
                             </tr></thead>
                             <tbody id="dressTableBody"></tbody>
                         </table>
                         </div>
-                        <button class="btn btn-success" style="margin-top:25px;width:100%;" onclick="saveAdmissionSettings()"><i class="fas fa-save"></i> Save Settings</button>
+                        <div style="display:flex;gap:12px;margin-top:20px;">
+                            <button class="btn btn-success" style="flex:1;" onclick="saveAdmissionSettings()"><i class="fas fa-save"></i> Save Settings</button>
+                            <button id="deleteSelectedDressBtn" onclick="deleteSelectedDresses()" style="display:none;flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;padding:12px;border-radius:30px;font-size:14px;font-weight:700;cursor:pointer;">
+                                <i class="fas fa-trash"></i> Delete Selected
+                            </button>
+                        </div>
                     </div>
                 </div>
                 ${getOverlay()}
+                <div id="addDressPopup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1001;justify-content:center;align-items:center;">
+                    <div style="background:white;border-radius:24px;padding:28px;width:380px;max-width:90%;">
+                        <h3 style="margin-bottom:20px;color:#1a1a2e;"><i class="fas fa-tshirt" style="color:#667eea;"></i> Add New Dress</h3>
+                        <div class="input-group" style="margin-bottom:14px;">
+                            <label>Dress Name <span style="color:#ef4444;">*</span></label>
+                            <input type="text" id="newDressName" placeholder="e.g. School Shirt" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;">
+                        </div>
+                        <div class="input-group" style="margin-bottom:14px;">
+                            <label>Price (₹)</label>
+                            <input type="number" id="newDressPrice" value="0" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;">
+                        </div>
+                        <div class="input-group" style="margin-bottom:20px;">
+                            <label>Position Type</label>
+                            <select id="newDressPosition" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;">
+                                <option value="horizontal">Horizontal</option>
+                                <option value="vertical">Vertical</option>
+                            </select>
+                        </div>
+                        <div style="display:flex;gap:10px;justify-content:flex-end;">
+                            <button onclick="document.getElementById('addDressPopup').style.display='none'" style="padding:10px 20px;border:none;border-radius:12px;background:#e0e0e0;cursor:pointer;font-weight:600;">Cancel</button>
+                            <button onclick="confirmAddDress()" style="padding:10px 20px;border:none;border-radius:12px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;cursor:pointer;font-weight:600;"><i class="fas fa-plus"></i> Add</button>
+                        </div>
+                    </div>
+                </div>
             </div>`;
 
             renderDressRows();
 
-            window.addDressRow = function() {
+            window.openAddDressPopup = function() {
+                document.getElementById('newDressName').value = '';
+                document.getElementById('newDressPrice').value = '0';
+                document.getElementById('newDressPosition').value = 'horizontal';
+                document.getElementById('addDressPopup').style.display = 'flex';
+                setTimeout(() => document.getElementById('newDressName').focus(), 100);
+            };
+
+            window.confirmAddDress = function() {
+                let name = document.getElementById('newDressName').value.trim();
+                let price = parseFloat(document.getElementById('newDressPrice').value) || 0;
+                let position = document.getElementById('newDressPosition').value;
+                if(!name) { showPopup('Dress name is required!', false); return; }
                 admissionSettings.dresses = admissionSettings.dresses || [];
-                admissionSettings.dresses.push({ name: '', color: '', price: 0 });
+                admissionSettings.dresses.push({ name, price, position });
+                document.getElementById('addDressPopup').style.display = 'none';
                 renderDressRows();
-                let newIdx = admissionSettings.dresses.length - 1;
-                setTimeout(() => {
-                    ['dressName_','dressColor_','dressPrice_'].forEach(pre => {
-                        let el = document.getElementById(pre + newIdx);
-                        if (el) { el.removeAttribute('readonly'); el.style.border = '2px solid #667eea'; el.focus(); }
-                    });
-                }, 50);
+                showPopup('✅ Dress added! Press Save to store.');
             };
 
-            window.toggleDressEdit = function(di) {
-                let fields = [`dressName_${di}`, `dressColor_${di}`, `dressPrice_${di}`];
-                let first = document.getElementById(fields[0]);
-                let isReadonly = first ? first.readOnly : true;
-                fields.forEach(fid => {
-                    let el = document.getElementById(fid);
-                    if (!el) return;
-                    el.readOnly = !isReadonly;
-                    el.style.border = isReadonly ? '2px solid #667eea' : '2px solid #e0e0e0';
-                    el.style.background = isReadonly ? 'white' : '#f9f9f9';
-                    if (!isReadonly) {
-                        admissionSettings.dresses[di].name = document.getElementById(`dressName_${di}`)?.value || '';
-                        admissionSettings.dresses[di].color = document.getElementById(`dressColor_${di}`)?.value || '';
-                        admissionSettings.dresses[di].price = parseFloat(document.getElementById(`dressPrice_${di}`)?.value) || 0;
-                    }
+            window.toggleDressDeleteMode = function() {
+                dressDeleteMode = !dressDeleteMode;
+                document.querySelectorAll('.dress-del-check').forEach(cb => {
+                    cb.style.display = dressDeleteMode ? 'inline-block' : 'none';
+                    cb.checked = false;
                 });
-                if (isReadonly) showPopup('✏️ Dress row editing enabled');
+                document.querySelectorAll('.dress-sn-label').forEach(lbl => {
+                    lbl.style.display = dressDeleteMode ? 'none' : 'inline';
+                });
+                document.getElementById('deleteSelectedDressBtn').style.display = dressDeleteMode ? 'block' : 'none';
+                if(dressDeleteMode) showPopup('Select dresses to delete, then tap Delete Selected.');
             };
 
-            window.deleteDressRow = function(di) {
-                if (confirm('Yeh dress entry delete karein?')) {
-                    admissionSettings.dresses.splice(di, 1);
-                    renderDressRows();
-                }
+            window.deleteSelectedDresses = function() {
+                let toDelete = [];
+                document.querySelectorAll('.dress-del-check:checked').forEach(cb => toDelete.push(parseInt(cb.getAttribute('data-di'))));
+                if(toDelete.length === 0) { showPopup('Select at least one dress to delete!', false); return; }
+                if(!confirm('Delete ' + toDelete.length + ' selected dress(es)?')) return;
+                admissionSettings.dresses = admissionSettings.dresses.filter((_, i) => !toDelete.includes(i));
+                dressDeleteMode = false;
+                document.getElementById('deleteSelectedDressBtn').style.display = 'none';
+                renderDressRows();
+                showPopup('✅ Deleted successfully!');
             };
 
             window.saveAdmissionSettings = function() {
                 (admissionSettings.dresses||[]).forEach((dr, di) => {
-                    dr.name = document.getElementById(`dressName_${di}`)?.value || dr.name;
-                    dr.color = document.getElementById(`dressColor_${di}`)?.value || dr.color;
                     dr.price = parseFloat(document.getElementById(`dressPrice_${di}`)?.value) || dr.price;
                 });
                 fsSave('admissionSettings', admissionSettings); localStorage.setItem('eRegister_admission_settings', JSON.stringify(admissionSettings));
@@ -4455,15 +4802,17 @@
         // ==================== WALLPAPER SETTING ====================
         function renderWallpaperSetting() {
             const wallpapers = [
-                { url:'https://i.ibb.co/FkPgyg6n', label:'Wallpaper 1' },
-                { url:'https://i.ibb.co/21fJyJDf', label:'Wallpaper 2' },
-                { url:'https://i.ibb.co/ZRvGPFyv', label:'Wallpaper 3' },
-                { url:'https://i.ibb.co/Tq0nQxH3', label:'Wallpaper 4' }
+                { css:'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)', label:'Purple Glow' },
+                { css:'linear-gradient(135deg, #f97316 0%, #ef4444 50%, #ec4899 100%)', label:'Sunset Blaze' },
+                { css:'linear-gradient(135deg, #0ea5e9 0%, #06b6d4 50%, #10b981 100%)', label:'Ocean Breeze' },
+                { css:'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)', label:'Dark Navy' }
             ];
             let gridHtml = wallpapers.map(w => {
-                let isSelected = selectedWallpaper === w.url;
-                return `<div onclick="applyWallpaper('${w.url}')" style="cursor:pointer;border-radius:16px;overflow:hidden;border:${isSelected?'4px solid #667eea':'3px solid transparent'};box-shadow:${isSelected?'0 0 0 3px #667eea':'0 2px 12px rgba(0,0,0,0.15)'};transition:all 0.2s;position:relative;">
-                    <img src="${w.url}" alt="${w.label}" style="width:100%;height:160px;object-fit:cover;display:block;" onerror="this.parentNode.style.background='#e0e0e0'">
+                let isSelected = selectedWallpaper === w.css;
+                return `<div onclick="applyWallpaper('${w.css}')" style="cursor:pointer;border-radius:16px;overflow:hidden;border:${isSelected?'4px solid #667eea':'3px solid transparent'};box-shadow:${isSelected?'0 0 0 3px #667eea':'0 2px 12px rgba(0,0,0,0.15)'};transition:all 0.2s;position:relative;">
+                    <div style="width:100%;height:160px;background:${w.css};display:flex;align-items:center;justify-content:center;">
+                        ${isSelected?`<div style="background:rgba(255,255,255,0.3);border-radius:50%;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:24px;"><i class='fas fa-check' style='color:white;'></i></div>`:'<i class="fas fa-image" style="color:rgba(255,255,255,0.5);font-size:36px;"></i>'}
+                    </div>
                     ${isSelected?`<div style="position:absolute;top:8px;right:8px;background:#10b981;color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:16px;"><i class='fas fa-check'></i></div>`:''}
                     <div style="padding:8px 10px;font-size:13px;font-weight:700;color:#333;background:white;text-align:center;">${w.label}</div>
                 </div>`;
@@ -4475,11 +4824,14 @@
             </div></div>${getOverlay()}</div>`;
         }
 
-        function applyWallpaper(url) {
-            selectedWallpaper = url;
-            fsSave('selectedWallpaper', url);
-            localStorage.setItem('eRegister_wallpaper', url);
-            showPopup(url ? '✅ Wallpaper applied successfully!' : '✅ Wallpaper removed.');
+        function applyWallpaper(cssVal) {
+            selectedWallpaper = cssVal;
+            fsSave('selectedWallpaper', cssVal);
+            localStorage.setItem('eRegister_wallpaper', cssVal);
+            // Instantly apply to home-bg if visible
+            let hbEl = document.querySelector('.home-bg');
+            if(hbEl) hbEl.style.backgroundImage = cssVal || '';
+            showPopup(cssVal ? '✅ Wallpaper applied successfully!' : '✅ Wallpaper removed.');
             renderWallpaperSetting();
         }
 
@@ -4490,6 +4842,7 @@
             let timeStr = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
             window._qpRows = [{ id:1, item:'', qty:1, price:0, discount:0, discMode:'rupee' }];
             window._qpDiscMode = 'rupee';
+            window._qpGlobalDiscMode = 'rupee';
 
             document.getElementById('app').innerHTML = `
             <div class="inner-bg"><div class="sticky-header">${getHeader('Quick Payment', true)}</div><div class="inner-container">
@@ -4505,6 +4858,14 @@
                     <div style="background:#f0f9ff;border-radius:10px;padding:8px 13px;margin-bottom:14px;font-size:13px;color:#0369a1;font-weight:600;display:flex;justify-content:space-between;align-items:center;">
                         <span><i class="fas fa-clock"></i> ${dateStr} &nbsp; ${timeStr}</span>
                         <span id="qpReceiptDisplay" style="background:#ef4444;color:white;padding:2px 14px;border-radius:14px;font-size:12px;font-weight:700;"></span>
+                    </div>
+                    <div style="background:#fff7ed;border:2px solid #fed7aa;border-radius:14px;padding:12px 14px;margin-bottom:14px;">
+                        <div style="font-size:13px;font-weight:700;color:#c2410c;margin-bottom:8px;"><i class="fas fa-receipt"></i> Enter Old Receipt Number (Optional)</div>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <input type="text" id="qpOldReceiptInput" placeholder="e.g. QP-001 or QP-002" style="flex:1;padding:8px 12px;border:2px solid #fed7aa;border-radius:10px;font-size:13px;">
+                            <button onclick="window._searchOldQPReceipt()" style="padding:8px 16px;background:linear-gradient(135deg,#f97316,#ea580c);color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;"><i class="fas fa-search"></i> Search</button>
+                        </div>
+                        <div id="qpOldReceiptResult" style="display:none;margin-top:10px;"></div>
                     </div>
                     <div class="form-row">
                         <div class="input-group">
@@ -4539,9 +4900,9 @@
                                 <th style="padding:8px 6px;text-align:right;width:80px;">Price (₹)</th>
                                 <th style="padding:8px 6px;text-align:center;min-width:140px;">
                                     Discount
-                                    <span style="display:inline-flex;align-items:center;gap:4px;margin-left:4px;background:rgba(255,255,255,0.2);border-radius:12px;padding:1px 4px;">
-                                        <button onclick="window._setQPDiscMode('percent')" id="qpDiscPctBtn" style="border:none;background:transparent;color:white;font-size:10px;font-weight:700;cursor:pointer;padding:0 3px;">%</button>
-                                        <button onclick="window._setQPDiscMode('rupee')" id="qpDiscRsBtn" style="border:none;background:rgba(255,255,255,0.3);color:white;font-size:10px;font-weight:700;cursor:pointer;padding:0 3px;border-radius:8px;">₹</button>
+                                    <span style="display:inline-flex;align-items:center;gap:4px;margin-left:4px;background:rgba(255,255,255,0.2);border-radius:14px;padding:3px 6px;">
+                                        <button onclick="window._setQPDiscMode('percent')" id="qpDiscPctBtn" style="border:none;background:transparent;color:white;font-size:15px;font-weight:800;cursor:pointer;padding:2px 7px;min-width:30px;min-height:30px;touch-action:manipulation;">%</button>
+                                        <button onclick="window._setQPDiscMode('rupee')" id="qpDiscRsBtn" style="border:none;background:rgba(255,255,255,0.3);color:white;font-size:15px;font-weight:800;cursor:pointer;padding:2px 7px;border-radius:10px;min-width:30px;min-height:30px;touch-action:manipulation;">₹</button>
                                     </span>
                                 </th>
                                 <th style="padding:8px 6px;text-align:right;width:80px;">Amount</th>
@@ -4562,19 +4923,47 @@
                     <span id="qpTotalDisplay" style="font-size:16px;font-weight:700;color:#1a1a2e;">₹0</span>
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #e5e7eb;">
-                    <span style="font-size:14px;color:#555;font-weight:600;"><i class="fas fa-percent" style="color:#f59e0b;"></i> Discount (₹)</span>
+                    <span style="font-size:14px;color:#555;font-weight:600;"><i class="fas fa-percent" style="color:#f59e0b;"></i> Discount
+                        <span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;background:#f3f4f6;border-radius:14px;padding:2px 5px;">
+                            <button onclick="window._setQPGlobalDiscMode('percent')" id="qpSumDiscPctBtn" style="border:none;background:transparent;color:#555;font-size:12px;font-weight:800;cursor:pointer;padding:2px 6px;border-radius:10px;">%</button>
+                            <button onclick="window._setQPGlobalDiscMode('rupee')" id="qpSumDiscRsBtn" style="border:none;background:#667eea;color:white;font-size:12px;font-weight:800;cursor:pointer;padding:2px 6px;border-radius:10px;">₹</button>
+                        </span>
+                    </span>
                     <input type="number" id="qpDiscount" value="0" min="0"
                            style="width:110px;border:1px solid #d1d5db;border-radius:8px;padding:6px 8px;font-size:14px;text-align:right;"
                            oninput="window._calcQPSummary()">
                 </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                <div style="padding:10px 0;border-bottom:1px solid #e5e7eb;">
+                    <div style="font-size:13px;font-weight:700;color:#1a1a2e;margin-bottom:8px;"><i class="fas fa-credit-card" style="color:#667eea;"></i> Mode of Payment</div>
+                    <div style="display:flex;gap:7px;flex-wrap:wrap;">
+                        <label id="qpMopCashLabel" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border:2px solid #e0e0e0;border-radius:18px;cursor:pointer;background:white;font-size:12px;font-weight:600;">
+                            <input type="radio" name="qpModeOfPayment" value="Cash" id="qpMopCash" style="accent-color:#10b981;" onchange="window._updateQPMOP()">
+                            <i class="fas fa-money-bill-wave" style="color:#10b981;"></i> Cash
+                        </label>
+                        <label id="qpMopPaytmLabel" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border:2px solid #e0e0e0;border-radius:18px;cursor:pointer;background:white;font-size:12px;font-weight:600;">
+                            <input type="radio" name="qpModeOfPayment" value="Paytm" id="qpMopPaytm" style="accent-color:#00baf2;" onchange="window._updateQPMOP()">
+                            <i class="fas fa-mobile-alt" style="color:#00baf2;"></i> Paytm/UPI
+                        </label>
+                        <label id="qpMopBothLabel" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border:2px solid #e0e0e0;border-radius:18px;cursor:pointer;background:white;font-size:12px;font-weight:600;">
+                            <input type="radio" name="qpModeOfPayment" value="Cash & Paytm" id="qpMopBoth" style="accent-color:#f59e0b;" onchange="window._updateQPMOP()">
+                            <i class="fas fa-exchange-alt" style="color:#f59e0b;"></i> Both
+                        </label>
+                    </div>
+                    <div id="qpMopSubFields" style="display:none;margin-top:8px;padding:8px;background:#fef3c7;border-radius:10px;border:1px solid #f59e0b;">
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                            <div><label style="font-size:12px;font-weight:600;">Cash (₹):</label> <input type="number" id="qpMopCashAmt" placeholder="0" style="width:80px;padding:5px;border:2px solid #10b981;border-radius:8px;" oninput="window._calcQPSummary()"></div>
+                            <div><label style="font-size:12px;font-weight:600;">Paytm (₹):</label> <input type="number" id="qpMopPaytmAmt" placeholder="0" style="width:80px;padding:5px;border:2px solid #00baf2;border-radius:8px;" oninput="window._calcQPSummary()"></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="qpSubmittedRow" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #e5e7eb;">
                     <span style="font-size:14px;color:#555;font-weight:600;"><i class="fas fa-hand-holding-usd" style="color:#10b981;"></i> Submitted (₹)</span>
                     <input type="number" id="qpSubmitted" value="0" min="0"
                            style="width:110px;border:1px solid #d1d5db;border-radius:8px;padding:6px 8px;font-size:14px;text-align:right;"
                            oninput="window._calcQPSummary()">
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 0;">
-                    <span style="font-size:16px;font-weight:700;color:#1a1a2e;"><i class="fas fa-wallet" style="color:#667eea;"></i> Balance</span>
+                    <span id="qpBalanceLabel" style="font-size:16px;font-weight:700;color:#1a1a2e;"><i class="fas fa-wallet" style="color:#667eea;"></i> Balance</span>
                     <span id="qpBalanceDisplay" style="font-size:22px;font-weight:800;color:#667eea;">₹0</span>
                 </div>
             </div>
@@ -4584,26 +4973,27 @@
                     onclick="window._showQPSaveOptions()">
                 <i class="fas fa-save"></i> Save Payment
             </button>
-            <div id="qpSaveOptionsBox" style="display:none;margin-top:16px;background:#f0f4ff;border-radius:16px;padding:18px;text-align:center;">
-                <p style="font-weight:700;font-size:15px;margin-bottom:14px;color:#1a1a2e;">
-                    <i class="fas fa-question-circle"></i> Save as:
+            <div id="qpSaveOptionsBox" style="display:none;margin-top:16px;background:#fef2f2;border-radius:16px;padding:18px;text-align:center;border:1.5px solid #fecaca;">
+                <p style="font-weight:700;font-size:15px;margin-bottom:14px;color:#dc2626;">
+                    <i class="fas fa-arrow-down"></i> Save as Expense?
                 </p>
+                <div style="font-size:13px;color:#666;margin-bottom:14px;">Quick payments are recorded in the Expense (red) section of Day Book.</div>
                 <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
                     <button onclick="window._saveQP('expense')"
-                        style="background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;padding:12px 24px;border-radius:30px;font-size:15px;font-weight:700;cursor:pointer;">
-                        <i class="fas fa-arrow-down"></i> Expense
+                        style="background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;padding:12px 28px;border-radius:30px;font-size:15px;font-weight:700;cursor:pointer;">
+                        <i class="fas fa-save"></i> Confirm &amp; Save
                     </button>
-                    <button onclick="window._saveQP('income')"
-                        style="background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;padding:12px 24px;border-radius:30px;font-size:15px;font-weight:700;cursor:pointer;">
-                        <i class="fas fa-arrow-up"></i> Income
+                    <button onclick="document.getElementById('qpSaveOptionsBox').style.display='none'"
+                        style="background:#e5e7eb;color:#374151;border:none;padding:12px 24px;border-radius:30px;font-size:15px;font-weight:700;cursor:pointer;">
+                        Cancel
                     </button>
                 </div>
             </div>
 
             </div></div>${getOverlay()}</div>`;
 
-            // Generate QP number
-            let qpNumber = getNextQPNumber();
+            // Show preview QP number (not incremented until Save is pressed)
+            let qpNumber = peekNextQPNumber();
             document.getElementById('qpReceiptDisplay').textContent = qpNumber;
 
             window._setQPDiscMode = function(mode) {
@@ -4619,6 +5009,7 @@
                         pBtn.style.background = 'transparent';
                     }
                 }
+                // Table header buttons only — summary discount is independent
                 // Update all item discount inputs to reflect mode
                 document.querySelectorAll('.qp-item-disc').forEach(inp => {
                     let row = inp.closest('tr');
@@ -4627,6 +5018,22 @@
                         window._qpRows[idx].discMode = mode;
                     }
                 });
+                window._calcQPSummary();
+            };
+
+            window._setQPGlobalDiscMode = function(mode) {
+                window._qpGlobalDiscMode = mode;
+                let sp = document.getElementById('qpSumDiscPctBtn');
+                let sr = document.getElementById('qpSumDiscRsBtn');
+                if(sp && sr) {
+                    if(mode === 'percent') {
+                        sp.style.background = '#667eea'; sp.style.color = 'white';
+                        sr.style.background = 'transparent'; sr.style.color = '#555';
+                    } else {
+                        sr.style.background = '#667eea'; sr.style.color = 'white';
+                        sp.style.background = 'transparent'; sp.style.color = '#555';
+                    }
+                }
                 window._calcQPSummary();
             };
 
@@ -4673,6 +5080,64 @@
                 }).join('');
             };
 
+            window._updateQPMOP = function() {
+                let labels = ['qpMopCashLabel','qpMopPaytmLabel','qpMopBothLabel'];
+                let colors = ['#10b981','#00baf2','#f59e0b'];
+                let isBoth = false;
+                labels.forEach((id, i) => {
+                    let el = document.getElementById(id);
+                    if(el) {
+                        let radio = el.querySelector('input[type="radio"]');
+                        if(radio && radio.checked) {
+                            el.style.borderColor = colors[i];
+                            el.style.background = colors[i] + '18';
+                            if(id === 'qpMopBothLabel') { document.getElementById('qpMopSubFields').style.display = 'block'; isBoth = true; }
+                        } else {
+                            el.style.borderColor = '#e0e0e0';
+                            el.style.background = 'white';
+                            if(id === 'qpMopBothLabel') { document.getElementById('qpMopSubFields').style.display = 'none'; }
+                        }
+                    }
+                });
+                let submRow = document.getElementById('qpSubmittedRow');
+                if(submRow) submRow.style.display = isBoth ? 'none' : '';
+                window._calcQPSummary();
+            };
+
+            window._searchOldQPReceipt = function() {
+                let query = (document.getElementById('qpOldReceiptInput')?.value || '').trim();
+                let resultDiv = document.getElementById('qpOldReceiptResult');
+                if(!resultDiv) return;
+                if(!query) { resultDiv.style.display = 'none'; return; }
+                // Match by last 3-4 digits OR exact receipt number (case-insensitive)
+                let queryDigits = query.replace(/\D/g, '');
+                let queryUpper = query.toUpperCase();
+                let found = quickPayments.filter(p => {
+                    let rNo = (p.receiptNo || '').toUpperCase();
+                    let rDigits = rNo.replace(/\D/g, '');
+                    if(rNo === queryUpper) return true;
+                    if(queryDigits.length >= 3 && rDigits.endsWith(queryDigits)) return true;
+                    return false;
+                });
+                if(found.length === 0) {
+                    resultDiv.style.display = 'block';
+                    resultDiv.innerHTML = '<div style="color:#ef4444;font-size:13px;font-weight:600;"><i class="fas fa-times-circle"></i> Receipt not found: ' + query + '</div>';
+                    return;
+                }
+                let p = found[found.length - 1];
+                let mop = p.modeOfPayment || p.type || '—';
+                let itemsList = Array.isArray(p.items) ? p.items.map(it => `<span style="background:#e0e7ff;color:#667eea;padding:1px 8px;border-radius:8px;font-size:11px;margin:2px;">${it.item || ''} x${it.qty} @₹${it.price}</span>`).join('') : '—';
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = `<div style="background:white;border:1px solid #10b981;border-radius:10px;padding:10px;font-size:12px;">
+                    <div style="font-weight:700;color:#10b981;margin-bottom:4px;"><i class="fas fa-check-circle"></i> Found: ${p.receiptNo}</div>
+                    <div><strong>Name:</strong> ${p.name || '—'} &nbsp; <strong>Date:</strong> ${p.date || '—'}</div>
+                    <div><strong>Items:</strong> ${itemsList}</div>
+                    <div><strong>Total:</strong> ₹${p.total||0} &nbsp; <strong>Disc:</strong> ₹${p.discount||0} &nbsp; <strong>Submitted:</strong> ₹${p.submitted||0} &nbsp; <strong>Balance:</strong> ₹${p.balance||0}</div>
+                    <div><strong>Mode:</strong> ${mop}</div>
+                    <button onclick="navigateTo(renderQPMoreInfo,'${p.receiptNo}')" style="margin-top:8px;padding:7px 16px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;"><i class="fas fa-info-circle"></i> More Information</button>
+                </div>`;
+            };
+
             window._calcQPSummary = function() {
                 let grandTotal = 0;
                 let totalDiscount = 0;
@@ -4690,11 +5155,38 @@
                     if(el) el.textContent = '₹' + amt;
                 });
                 let disc = parseFloat(document.getElementById('qpDiscount').value) || 0;
-                let subm = parseFloat(document.getElementById('qpSubmitted').value) || 0;
+                // Check if global discount is percent mode (uses its own independent mode)
+                if(window._qpGlobalDiscMode === 'percent') {
+                    disc = Math.round(grandTotal * disc / 100);
+                }
                 let finalTotal = Math.max(0, grandTotal - disc);
-                let bal = Math.max(0, finalTotal - subm);
-                document.getElementById('qpTotalDisplay').textContent   = '₹' + grandTotal;
-                document.getElementById('qpBalanceDisplay').textContent = '₹' + bal;
+
+                // Handle MOP
+                let qpMopBoth = document.getElementById('qpMopBoth');
+                let isBoth = qpMopBoth && qpMopBoth.checked;
+                let subm = 0;
+                if(isBoth) {
+                    let cashAmt = parseFloat(document.getElementById('qpMopCashAmt')?.value) || 0;
+                    let paytmAmt = parseFloat(document.getElementById('qpMopPaytmAmt')?.value) || 0;
+                    subm = cashAmt + paytmAmt;
+                    let sEl = document.getElementById('qpSubmitted');
+                    if(sEl) sEl.value = subm;
+                } else {
+                    subm = parseFloat(document.getElementById('qpSubmitted').value) || 0;
+                }
+
+                let bal = finalTotal - subm;
+                document.getElementById('qpTotalDisplay').textContent = '₹' + grandTotal;
+
+                let balLabel = document.getElementById('qpBalanceLabel');
+                let balDisplay = document.getElementById('qpBalanceDisplay');
+                if(bal < 0) {
+                    if(balLabel) balLabel.innerHTML = '<i class="fas fa-plus-circle" style="color:#10b981;"></i> <span style="color:#10b981;">Advance</span>';
+                    if(balDisplay) { balDisplay.textContent = '₹' + Math.abs(bal); balDisplay.style.color = '#10b981'; }
+                } else {
+                    if(balLabel) balLabel.innerHTML = '<i class="fas fa-wallet" style="color:#667eea;"></i> Balance';
+                    if(balDisplay) { balDisplay.textContent = '₹' + bal; balDisplay.style.color = '#667eea'; }
+                }
             };
 
             window._addQPRow = function() {
@@ -4733,21 +5225,41 @@
                     grandTotal += amt;
                     return { ...r, discountAmt, amt };
                 });
-                let disc = parseFloat(document.getElementById('qpDiscount').value) || 0;
-                let subm = parseFloat(document.getElementById('qpSubmitted').value) || 0;
+                let discRaw = parseFloat(document.getElementById('qpDiscount').value) || 0;
+                let disc = (window._qpDiscMode === 'percent') ? Math.round(grandTotal * discRaw / 100) : discRaw;
                 let finalTotal = Math.max(0, grandTotal - disc);
-                let bal = Math.max(0, finalTotal - subm);
+
+                // Get MOP
+                let qpMopBothEl = document.getElementById('qpMopBoth');
+                let qpIsBoth = qpMopBothEl && qpMopBothEl.checked;
+                let subm = 0;
+                let modeOfPayment = '';
+                let mopCashAmt = 0, mopPaytmAmt = 0;
+                if(qpIsBoth) {
+                    mopCashAmt = parseFloat(document.getElementById('qpMopCashAmt')?.value) || 0;
+                    mopPaytmAmt = parseFloat(document.getElementById('qpMopPaytmAmt')?.value) || 0;
+                    subm = mopCashAmt + mopPaytmAmt;
+                    modeOfPayment = 'Cash & Paytm';
+                } else {
+                    subm = parseFloat(document.getElementById('qpSubmitted').value) || 0;
+                    let qpMopRadios = document.querySelectorAll('input[name="qpModeOfPayment"]');
+                    for(let r of qpMopRadios) { if(r.checked) { modeOfPayment = r.value; break; } }
+                }
+                let bal = finalTotal - subm;
                 let qpNumber = getNextQPNumber();
                 
                 let rec = {
                     id: Date.now(),
-                    name:       document.getElementById('qpName').value.trim(),
-                    property:   document.getElementById('qpProperty').value,
-                    items:      itemsWithDiscount,
-                    total:      grandTotal,
-                    discount:   disc,
-                    submitted:  subm,
-                    balance:    bal,
+                    name:           document.getElementById('qpName').value.trim(),
+                    property:       document.getElementById('qpProperty').value,
+                    items:          itemsWithDiscount,
+                    total:          grandTotal,
+                    discount:       disc,
+                    submitted:      subm,
+                    balance:        bal,
+                    modeOfPayment:  modeOfPayment,
+                    cashAmount:     mopCashAmt || undefined,
+                    paytmAmount:    mopPaytmAmt || undefined,
                     date: new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }),
                     time: new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }),
                     type: type,
@@ -4765,6 +5277,165 @@
             window._renderQPRows();
             window._calcQPSummary();
             window._setQPDiscMode('rupee');
+        }
+
+        // ==================== QP MORE INFORMATION ====================
+        function renderQPMoreInfo(receiptNo) {
+            let queryDigits = (receiptNo || '').replace(/\D/g, '');
+            let all = quickPayments;
+            let p = all.find(x => {
+                let rNo = (x.receiptNo || '').toUpperCase();
+                let rDigits = rNo.replace(/\D/g, '');
+                return rNo === (receiptNo || '').toUpperCase() || (queryDigits.length >= 3 && rDigits.endsWith(queryDigits));
+            });
+            if(!p) { showPopup('Receipt not found!', false); return; }
+            let mop = p.modeOfPayment || p.type || '—';
+            let itemsList = Array.isArray(p.items) ? p.items.map(it =>
+                `<tr><td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;">${it.item || '—'}</td><td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;text-align:center;">${it.qty}</td><td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;text-align:right;">₹${it.price}</td><td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;text-align:right;">₹${(it.qty*(it.price||0)-(it.discountAmt||0)).toFixed(0)}</td></tr>`
+            ).join('') : '<tr><td colspan="4" style="padding:10px;color:#999;text-align:center;">No items</td></tr>';
+            let newReceiptPreview = peekNextQPNumber();
+
+            document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('More Information', true)}</div><div class="inner-container">
+            <div class="form-card">
+                <div class="form-title"><i class="fas fa-info-circle" style="color:#667eea;"></i> Last Transaction Details</div>
+                <div style="background:#f8f9fa;border-radius:14px;padding:14px;margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+                        <span style="background:linear-gradient(135deg,#10b981,#059669);color:white;padding:5px 14px;border-radius:20px;font-weight:700;font-size:13px;"><i class="fas fa-receipt"></i> ${p.receiptNo} <small style="opacity:0.85;">(Old)</small></span>
+                        <span style="background:linear-gradient(135deg,#ef4444,#dc2626);color:white;padding:5px 14px;border-radius:20px;font-weight:700;font-size:13px;"><i class="fas fa-receipt"></i> ${newReceiptPreview} <small style="opacity:0.85;">(New)</small></span>
+                    </div>
+                    <div style="font-size:13px;color:#555;margin-bottom:8px;"><strong>Name:</strong> ${p.name || '—'} &nbsp; <strong>Mode:</strong> ${mop} &nbsp; <strong>Date:</strong> ${p.date || '—'}</div>
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;">
+                        <thead><tr style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;">
+                            <th style="padding:8px 10px;text-align:left;">Item</th>
+                            <th style="padding:8px 10px;text-align:center;">Qty</th>
+                            <th style="padding:8px 10px;text-align:right;">Price</th>
+                            <th style="padding:8px 10px;text-align:right;">Amount</th>
+                        </tr></thead>
+                        <tbody>${itemsList}</tbody>
+                    </table>
+                    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;">
+                        <span style="background:#e0e7ff;color:#667eea;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">Total: ₹${p.total||0}</span>
+                        <span style="background:#fef3c7;color:#b45309;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">Disc: ₹${p.discount||0}</span>
+                        <span style="background:#d1fae5;color:#065f46;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">Submitted: ₹${p.submitted||0}</span>
+                        ${(p.balance||0)>0?`<span style="background:#fee2e2;color:#991b1b;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">Balance: ₹${p.balance}</span>`:''}
+                    </div>
+                </div>
+
+                <div class="form-title" style="margin-top:6px;"><i class="fas fa-plus-circle" style="color:#667eea;"></i> New Transaction</div>
+                <div style="margin-bottom:10px;">
+                    <input type="text" id="moreInfoName" value="${p.name||''}" placeholder="Name" class="search-input" style="font-size:14px;margin-bottom:10px;">
+                </div>
+                <div style="overflow-x:auto;margin-bottom:10px;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;" id="miItemsTable">
+                        <thead><tr style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;">
+                            <th style="padding:8px;text-align:center;width:36px;">Sn.</th>
+                            <th style="padding:8px;text-align:left;">Item</th>
+                            <th style="padding:8px;text-align:center;width:56px;">Qty</th>
+                            <th style="padding:8px;text-align:right;width:90px;">Price</th>
+                            <th style="padding:8px;text-align:right;width:90px;">Amount</th>
+                            <th style="padding:8px;width:30px;"></th>
+                        </tr></thead>
+                        <tbody id="miItemsBody"></tbody>
+                    </table>
+                </div>
+                <button onclick="window._addMIRow()" style="background:#e0e7ff;color:#667eea;border:none;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:14px;"><i class="fas fa-plus"></i> Add Row</button>
+                <div style="background:#f8f9fa;border-radius:12px;padding:12px;margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <span style="font-size:13px;font-weight:700;color:#555;"><i class="fas fa-tag" style="color:#f59e0b;"></i> Discount (₹)</span>
+                        <input type="number" id="miDiscount" value="0" min="0" style="width:110px;padding:6px;border:1px solid #e0e0e0;border-radius:8px;text-align:right;" oninput="window._calcMISummary()">
+                    </div>
+                    <div style="font-size:13px;font-weight:700;color:#555;margin-bottom:8px;"><i class="fas fa-credit-card" style="color:#667eea;"></i> Mode of Payment</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                        <label style="display:flex;align-items:center;gap:5px;padding:6px 12px;border:2px solid #10b981;border-radius:16px;cursor:pointer;background:#f0fdf4;font-size:12px;font-weight:600;">
+                            <input type="radio" name="miMOP" value="Cash" id="miMopCash" checked style="accent-color:#10b981;"> <i class="fas fa-money-bill-wave" style="color:#10b981;"></i> Cash
+                        </label>
+                        <label style="display:flex;align-items:center;gap:5px;padding:6px 12px;border:2px solid #e0e0e0;border-radius:16px;cursor:pointer;background:white;font-size:12px;font-weight:600;">
+                            <input type="radio" name="miMOP" value="Paytm" id="miMopPaytm" style="accent-color:#00baf2;"> <i class="fas fa-mobile-alt" style="color:#00baf2;"></i> Paytm/UPI
+                        </label>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid #e5e7eb;">
+                        <span style="font-size:13px;font-weight:600;color:#555;">Total (₹)</span>
+                        <span id="miTotalDisplay" style="font-size:18px;font-weight:800;color:#1a1a2e;">₹0</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid #e5e7eb;">
+                        <span style="font-size:13px;font-weight:600;color:#555;"><i class="fas fa-hand-holding-usd" style="color:#10b981;"></i> Submitted (₹)</span>
+                        <input type="number" id="miSubmitted" value="${p.balance||0}" min="0" style="width:110px;padding:6px;border:1px solid #e0e0e0;border-radius:8px;text-align:right;" oninput="window._calcMISummary()">
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid #e5e7eb;">
+                        <span style="font-size:14px;font-weight:700;color:#1a1a2e;"><i class="fas fa-wallet" style="color:#667eea;"></i> Balance</span>
+                        <span id="miBalanceDisplay" style="font-size:20px;font-weight:800;color:#667eea;">₹${p.balance||0}</span>
+                    </div>
+                </div>
+                <button onclick="window._saveMIQP('${p.receiptNo}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;">
+                    <i class="fas fa-save"></i> Save as Expense &nbsp;<span style="opacity:0.85;font-size:12px;">(Receipt: ${newReceiptPreview})</span>
+                </button>
+            </div>
+            </div>${getOverlay()}</div>`;
+
+            // Initialize items list with prev balance as a carry-forward row
+            window._miRows = (p.balance > 0) ? [{ item: 'Balance Carry Forward', qty: 1, price: p.balance || 0 }] : [{ item: '', qty: 1, price: 0 }];
+
+            window._renderMIRows = function() {
+                let rows = window._miRows;
+                document.getElementById('miItemsBody').innerHTML = rows.map((r, i) => {
+                    let amt = (r.qty||1) * (r.price||0);
+                    return `<tr style="background:${i%2===0?'white':'#f9fafb'};">
+                        <td style="padding:6px;text-align:center;font-size:12px;color:#999;">${i+1}</td>
+                        <td style="padding:6px;"><input value="${r.item||''}" placeholder="Item name" style="width:100%;border:1px solid #e5e7eb;border-radius:7px;padding:5px 8px;font-size:13px;" oninput="window._miRows[${i}].item=this.value"></td>
+                        <td style="padding:6px;text-align:center;"><input type="number" value="${r.qty||1}" style="width:46px;border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:13px;text-align:center;" oninput="window._miRows[${i}].qty=+this.value||1;window._calcMISummary()"></td>
+                        <td style="padding:6px;text-align:right;"><input type="number" value="${r.price||0}" style="width:80px;border:1px solid #e5e7eb;border-radius:7px;padding:5px 6px;font-size:13px;text-align:right;" oninput="window._miRows[${i}].price=+this.value||0;window._calcMISummary()"></td>
+                        <td style="padding:6px;text-align:right;font-size:13px;font-weight:700;color:#667eea;">₹${amt}</td>
+                        <td style="padding:4px;text-align:center;">${rows.length>1?`<button onclick="window._miRows.splice(${i},1);window._renderMIRows();window._calcMISummary();" style="background:#fee2e2;border:none;color:#ef4444;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer;">✕</button>`:''}</td>
+                    </tr>`;
+                }).join('');
+            };
+
+            window._addMIRow = function() {
+                window._miRows.push({ item: '', qty: 1, price: 0 });
+                window._renderMIRows();
+            };
+
+            window._calcMISummary = function() {
+                let total = (window._miRows||[]).reduce((s,r) => s + ((r.qty||1)*(r.price||0)), 0);
+                let disc = parseFloat(document.getElementById('miDiscount')?.value) || 0;
+                let finalTotal = Math.max(0, total - disc);
+                let submitted = parseFloat(document.getElementById('miSubmitted')?.value) || 0;
+                let balance = Math.max(0, finalTotal - submitted);
+                let tEl = document.getElementById('miTotalDisplay');
+                let bEl = document.getElementById('miBalanceDisplay');
+                if(tEl) tEl.textContent = '₹' + finalTotal;
+                if(bEl) bEl.textContent = '₹' + balance;
+            };
+
+            window._saveMIQP = function(prevReceiptNo) {
+                let name = document.getElementById('moreInfoName')?.value.trim();
+                if(!name) { showPopup('Name required!', false); return; }
+                let items = (window._miRows||[]).map(r => ({ item: r.item, qty: r.qty||1, price: r.price||0, discountAmt: 0 }));
+                let total = items.reduce((s,it) => s + ((it.qty||1)*(it.price||0)), 0);
+                let disc = parseFloat(document.getElementById('miDiscount')?.value) || 0;
+                let finalTotal = Math.max(0, total - disc);
+                let submitted = parseFloat(document.getElementById('miSubmitted')?.value) || 0;
+                let balance = Math.max(0, finalTotal - submitted);
+                let mopEl = document.querySelector('input[name="miMOP"]:checked');
+                let mop = mopEl ? mopEl.value : 'Cash';
+                let qpNumber = getNextQPNumber();
+                let now = new Date();
+                let newPayment = {
+                    id: Date.now(), receiptNo: qpNumber, name,
+                    date: now.toLocaleDateString('en-IN'), time: now.toLocaleTimeString('en-IN'),
+                    items, total: finalTotal, discount: disc, submitted, balance,
+                    prevReceipt: prevReceiptNo, modeOfPayment: mop, type: 'expense',
+                    timestamp: now.getTime()
+                };
+                quickPayments.push(newPayment);
+                fsSave('quickPayments', quickPayments);
+                localStorage.setItem('eRegister_quickPayments', JSON.stringify(quickPayments));
+                showPopup('✅ Expense saved! Receipt: ' + qpNumber);
+                navigateTo(renderQuickPayment);
+            };
+
+            window._renderMIRows();
+            window._calcMISummary();
         }
 
         // ==================== DAY BOOK ====================
@@ -4826,8 +5497,9 @@
             function printDayBookEntries(entries) {
                 let rowsHtml = entries.map(e => {
                     let receiptDisplay = e.receiptNo ? `<span style="background:#ef4444;color:white;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;">${e.receiptNo}</span>` : '';
+                    let mopText = e.modeOfPayment || '—';
                     return `<tr style="background:#f8fafc;border-bottom:1px solid #e0e0e0;">
-                        <td style="padding:6px 8px;font-size:11px;">${e.date}<br><span style="color:#999;font-size:9px;">${e.time||''}</span></td>
+                        <td style="padding:6px 8px;font-size:11px;">${e.date}<br><span style="color:#999;font-size:9px;">${e.time||''}</span><br>${receiptDisplay}</td>
                         <td style="padding:6px 8px;font-size:11px;font-weight:600;">${getName(e)}</td>
                         <td style="padding:6px 8px;font-size:11px;">${e.property||''}</td>
                         <td style="padding:6px 8px;font-size:11px;max-width:140px;word-break:break-word;">${getItemSummary(e)}</td>
@@ -4835,6 +5507,7 @@
                         <td style="padding:6px 8px;font-size:11px;text-align:right;">₹${e.discount||0}</td>
                         <td style="padding:6px 8px;font-size:11px;text-align:right;font-weight:700;">₹${e.total||0}</td>
                         <td style="padding:6px 8px;font-size:11px;text-align:right;color:#667eea;">₹${e.balance||0}</td>
+                        <td style="padding:6px 8px;font-size:11px;text-align:left;color:#555;">${mopText}</td>
                     </tr>`;
                 }).join('');
                 let type = entries[0]?.type || '';
@@ -4849,7 +5522,7 @@
                     + '</div>'
                     + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
                     + '<thead><tr style="background:'+color+';color:white;">'
-                    + '<th style="padding:6px 8px;text-align:left;">Date & Time</th>'
+                    + '<th style="padding:6px 8px;text-align:left;">Date/Receipt</th>'
                     + '<th style="padding:6px 8px;text-align:left;">Name</th>'
                     + '<th style="padding:6px 8px;text-align:left;">Property</th>'
                     + '<th style="padding:6px 8px;text-align:left;">Items</th>'
@@ -4857,12 +5530,14 @@
                     + '<th style="padding:6px 8px;text-align:right;">Discount</th>'
                     + '<th style="padding:6px 8px;text-align:right;">Total</th>'
                     + '<th style="padding:6px 8px;text-align:right;">Balance</th>'
+                    + '<th style="padding:6px 8px;text-align:left;">Payment Mode</th>'
                     + '</tr></thead>'
                     + '<tbody>' + rowsHtml + '</tbody>'
                     + '<tfoot><tr style="font-weight:700;background:'+color+'22;">'
                     + '<td colspan="6" style="padding:8px;text-align:right;">Grand Total:</td>'
                     + '<td style="padding:8px;text-align:right;color:'+color+';">₹'+sumTotal+'</td>'
                     + '<td style="padding:8px;text-align:right;color:#667eea;">₹'+sumBalance+'</td>'
+                    + '<td></td>'
                     + '</tr></tfoot>'
                     + '</table>';
                 doPrint(bodyHtml);
@@ -4874,8 +5549,15 @@
                         <i class="fas fa-inbox"></i> No ${typeLabel.toLowerCase()} entries yet.
                     </div>`;
                 }
+                let isExpense = typeLabel === 'Expense';
                 let rows = entries.map((e, i) => {
                     let receiptDisplay = e.receiptNo ? `<span style="background:#ef4444;color:white;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;">${e.receiptNo}</span>` : '';
+                    let deleteBtn = isExpense
+                        ? `<td style="padding:6px 4px;text-align:center;">
+                            <input type="checkbox" class="expense-del-check" data-id="${e.id}" style="width:16px;height:16px;cursor:pointer;accent-color:#ef4444;display:none;" id="expChk_${e.id}">
+                            <button onclick="window._confirmDeleteExpense(${e.id})" class="exp-del-btn-${e.id}" style="background:#fee2e2;border:none;color:#ef4444;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:12px;" title="Delete"><i class="fas fa-trash-alt"></i></button>
+                           </td>`
+                        : '';
                     return `<tr class="daybook-row-select" style="background:${i%2===0?'white':'#f9fafb'};">
                         <td style="padding:8px 6px;text-align:center;">
                             <input type="checkbox" class="daybook-select-cb" data-id="${e.id}" onchange="window._toggleDayBookRow(${e.id}, this)" style="width:16px;height:16px;cursor:pointer;accent-color:#667eea;">
@@ -4889,13 +5571,17 @@
                         <td style="padding:8px 10px;font-size:13px;font-weight:700;text-align:right;color:${color};">₹${e.total||0}</td>
                         <td style="padding:8px 10px;font-size:12px;text-align:right;color:#667eea;">₹${e.submitted||0}</td>
                         <td style="padding:8px 10px;font-size:12px;text-align:right;color:#667eea;">₹${e.balance||0}</td>
+                        ${deleteBtn}
                     </tr>`;
                 }).join('');
                 let sumTotal   = entries.reduce((s,e) => s + (e.total||0), 0);
                 let sumBalance = entries.reduce((s,e) => s + (e.balance||0), 0);
                 let sumSubmitted = entries.reduce((s,e) => s + (e.submitted||0), 0);
-                return `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:720px;" id="dayBookTable_${typeLabel}">
-                    <thead><tr style="background:${color};color:white;font-size:12px;">
+                let deleteColHeader = isExpense ? `<th style="padding:10px 8px;text-align:center;width:50px;">Del</th>` : '';
+                let deleteColFooter = isExpense ? `<td></td>` : '';
+                let scrollStyle = isExpense ? 'max-height:400px;overflow-y:auto;' : '';
+                return `<div style="overflow-x:auto;${scrollStyle}"><table style="width:100%;border-collapse:collapse;min-width:${isExpense?'780':'720'}px;" id="dayBookTable_${typeLabel}">
+                    <thead><tr style="background:${color};color:white;font-size:12px;${isExpense?'position:sticky;top:0;z-index:2;':''}">
                         <th style="padding:6px 4px;text-align:center;width:28px;"><input type="checkbox" id="daybookSelectAll_${typeLabel}" onchange="window._toggleAllDayBook('${typeLabel}', this)" style="width:14px;height:14px;cursor:pointer;accent-color:white;"></th>
                         <th style="padding:10px 8px;text-align:left;white-space:nowrap;">Date & Time</th>
                         <th style="padding:10px 8px;text-align:left;">Name / Receipt</th>
@@ -4906,6 +5592,7 @@
                         <th style="padding:10px 8px;text-align:right;">Total</th>
                         <th style="padding:10px 8px;text-align:right;">Submitted</th>
                         <th style="padding:10px 8px;text-align:right;">Balance</th>
+                        ${deleteColHeader}
                     </tr></thead>
                     <tbody>${rows}</tbody>
                     <tfoot><tr style="background:${color}22;font-weight:700;">
@@ -4913,9 +5600,22 @@
                         <td style="padding:10px;text-align:right;font-size:14px;color:${color};">₹${sumTotal}</td>
                         <td style="padding:10px;text-align:right;font-size:13px;color:#059669;">₹${sumSubmitted}</td>
                         <td style="padding:10px;text-align:right;font-size:13px;color:#667eea;">₹${sumBalance}</td>
+                        ${deleteColFooter}
                     </tr></tfoot>
                 </table></div>`;
             }
+
+            window._confirmDeleteExpense = function(id) {
+                if(!confirm('Delete this expense entry?')) return;
+                let idx = quickPayments.findIndex(p => p.id === id);
+                if(idx >= 0) {
+                    quickPayments.splice(idx, 1);
+                    fsSave('quickPayments', quickPayments);
+                    localStorage.setItem('eRegister_quickPayments', JSON.stringify(quickPayments));
+                    showPopup('✅ Expense deleted!');
+                    navigateTo(renderDayBook);
+                }
+            };
 
             // Store selected rows globally for print
             window._dayBookSelected = new Set();
@@ -4994,17 +5694,202 @@
         }
 
         // ==================== INVENTORY ====================
+        if(!window._inventoryData) window._inventoryData = [];
+
         function renderInventory() {
+            let inv = window._inventoryData || [];
+            let deleteMode = false;
+
+            function renderInvRows() {
+                let inv2 = window._inventoryData || [];
+                let rowsHtml = inv2.length === 0
+                    ? '<tr><td colspan="5" style="padding:24px;text-align:center;color:#999;"><i class="fas fa-inbox"></i> No items yet. Click + to add.</td></tr>'
+                    : inv2.map((item, i) => `<tr style="background:${i%2===0?'white':'#f9fafb'};">
+                        <td style="padding:10px;text-align:center;">
+                            <input type="checkbox" class="inv-del-check" data-idx="${i}" style="width:18px;height:18px;cursor:pointer;display:none;accent-color:#ef4444;">
+                            <span class="inv-sn" style="font-weight:600;color:#667eea;">${i+1}</span>
+                        </td>
+                        <td style="padding:10px;font-weight:600;" id="invName_${i}">${item.name||''}</td>
+                        <td style="padding:10px;text-align:center;">
+                            <input type="number" id="invQty_${i}" value="${item.qty||0}" min="0"
+                                style="width:80px;padding:6px;border:2px solid #e0e0e0;border-radius:8px;text-align:center;" readonly>
+                        </td>
+                        <td style="padding:10px;text-align:right;">
+                            <input type="number" id="invPrice_${i}" value="${item.price||0}" min="0"
+                                style="width:90px;padding:6px;border:2px solid #e0e0e0;border-radius:8px;text-align:right;" readonly>
+                        </td>
+                        <td style="padding:10px;text-align:center;">
+                            <button onclick="editInvRow(${i})" id="invEditBtn_${i}" style="background:none;border:none;cursor:pointer;" title="Edit">
+                                <img src="${img.editIcon}" style="width:32px;height:32px;">
+                            </button>
+                        </td>
+                    </tr>`).join('');
+                let tbody = document.getElementById('invTableBody');
+                if(tbody) tbody.innerHTML = rowsHtml;
+            }
+
             document.getElementById('app').innerHTML = `
             <div class="inner-bg"><div class="sticky-header">${getHeader('Inventory', true)}</div><div class="inner-container">
-            <div class="form-card" style="text-align:center;padding:48px 24px;">
-                <img src="${img.inventoryIcon}" style="width:110px;height:110px;object-fit:contain;margin-bottom:20px;"
-                     onerror="this.onerror=null;this.src='${img.inventoryIconFallback}'">
-                <div class="form-title" style="text-align:center;"><i class="fas fa-boxes"></i> Inventory</div>
-                <p style="color:#666;font-size:15px;margin-top:16px;">Inventory management coming soon.<br>
-                    <span style="font-size:13px;color:#999;">Track stock, items, and supplies here.</span>
-                </p>
-            </div></div>${getOverlay()}</div>`;
+            <div class="form-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <div class="form-title" style="margin-bottom:0;"><i class="fas fa-boxes"></i> Inventory</div>
+                    <div style="display:flex;gap:10px;align-items:center;">
+                        <button onclick="openAddInventoryPopup()" style="background:none;border:none;cursor:pointer;" title="Add item">
+                            <img src="${img.plusIcon}" style="width:42px;height:42px;">
+                        </button>
+                        <button onclick="toggleInvEditMode()" id="invEditModeBtn" style="background:none;border:none;cursor:pointer;" title="Edit items">
+                            <img src="${img.editIcon}" style="width:38px;height:38px;">
+                        </button>
+                        <button onclick="toggleInvDeleteMode()" id="invDeleteModeBtn" style="background:none;border:none;cursor:pointer;" title="Delete items">
+                            <img src="${img.deleteIcon}" style="width:36px;height:36px;">
+                        </button>
+                    </div>
+                </div>
+                <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead><tr style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;position:sticky;top:0;z-index:2;">
+                        <th style="padding:10px;text-align:center;width:50px;">Sn.</th>
+                        <th style="padding:10px;text-align:left;">Item Name</th>
+                        <th style="padding:10px;text-align:center;width:90px;">Qty</th>
+                        <th style="padding:10px;text-align:right;width:100px;">Price (₹)</th>
+                        <th style="padding:10px;text-align:center;width:60px;">Edit</th>
+                    </tr></thead>
+                    <tbody id="invTableBody"></tbody>
+                </table>
+                </div>
+                <div style="display:flex;gap:12px;margin-top:18px;">
+                    <button onclick="saveInventory()" style="flex:1;background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;padding:12px;border-radius:30px;font-size:14px;font-weight:700;cursor:pointer;">
+                        <i class="fas fa-save"></i> Save Inventory
+                    </button>
+                    <button id="invDeleteSelectedBtn" onclick="deleteSelectedInvItems()" style="display:none;flex:1;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;padding:12px;border-radius:30px;font-size:14px;font-weight:700;cursor:pointer;">
+                        <i class="fas fa-trash"></i> Delete Selected
+                    </button>
+                </div>
+            </div>
+            </div>${getOverlay()}
+            <div id="addInvPopup" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1001;justify-content:center;align-items:center;">
+                <div style="background:white;border-radius:24px;padding:28px;width:380px;max-width:90%;">
+                    <h3 style="margin-bottom:20px;color:#1a1a2e;"><i class="fas fa-plus-circle" style="color:#10b981;"></i> Add Inventory Item</h3>
+                    <div class="input-group" style="margin-bottom:14px;">
+                        <label>Item Name <span style="color:#ef4444;">*</span></label>
+                        <input type="text" id="newInvName" placeholder="e.g. Tie, Belt, Shoes..." style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;">
+                    </div>
+                    <div class="input-group" style="margin-bottom:14px;">
+                        <label>Quantity</label>
+                        <input type="number" id="newInvQty" value="0" min="0" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;">
+                    </div>
+                    <div class="input-group" style="margin-bottom:20px;">
+                        <label>Price per Item (₹)</label>
+                        <input type="number" id="newInvPrice" value="0" min="0" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;">
+                    </div>
+                    <div style="display:flex;gap:10px;justify-content:flex-end;">
+                        <button onclick="document.getElementById('addInvPopup').style.display='none'" style="padding:10px 20px;border:none;border-radius:12px;background:#e0e0e0;cursor:pointer;font-weight:600;">Cancel</button>
+                        <button onclick="confirmAddInvItem()" style="padding:10px 20px;border:none;border-radius:12px;background:linear-gradient(135deg,#10b981,#059669);color:white;cursor:pointer;font-weight:600;"><i class="fas fa-plus"></i> Add</button>
+                    </div>
+                </div>
+            </div>
+            </div>`;
+
+            renderInvRows();
+
+            window.openAddInventoryPopup = function() {
+                document.getElementById('newInvName').value = '';
+                document.getElementById('newInvQty').value = '0';
+                document.getElementById('newInvPrice').value = '0';
+                document.getElementById('addInvPopup').style.display = 'flex';
+                setTimeout(() => document.getElementById('newInvName').focus(), 100);
+            };
+
+            window.confirmAddInvItem = function() {
+                let name = document.getElementById('newInvName').value.trim();
+                let qty = parseInt(document.getElementById('newInvQty').value) || 0;
+                let price = parseFloat(document.getElementById('newInvPrice').value) || 0;
+                if(!name) { showPopup('Item name is required!', false); return; }
+                window._inventoryData = window._inventoryData || [];
+                window._inventoryData.push({ name, qty, price });
+                document.getElementById('addInvPopup').style.display = 'none';
+                renderInvRows();
+                showPopup('✅ Item added! Press Save to store.');
+            };
+
+            let invEditMode = false;
+            window.toggleInvEditMode = function() {
+                invEditMode = !invEditMode;
+                document.querySelectorAll('#invTableBody input').forEach(inp => {
+                    inp.readOnly = !invEditMode;
+                    inp.style.background = invEditMode ? 'white' : '#f9f9f9';
+                    inp.style.border = invEditMode ? '2px solid #667eea' : '2px solid #e0e0e0';
+                });
+                if(invEditMode) showPopup('✏️ Edit mode on — update values then press Save.');
+            };
+
+            window.editInvRow = function(i) {
+                let nameEl = document.getElementById(`invName_${i}`);
+                let qtyEl = document.getElementById(`invQty_${i}`);
+                let priceEl = document.getElementById(`invPrice_${i}`);
+                let btn = document.getElementById(`invEditBtn_${i}`);
+                if(nameEl && nameEl.tagName === 'SPAN') {
+                    let input = document.createElement('input');
+                    input.type = 'text'; input.value = nameEl.textContent;
+                    input.style.cssText = 'width:100%;padding:6px;border:2px solid #667eea;border-radius:8px;font-size:14px;';
+                    input.id = `invName_${i}`;
+                    nameEl.replaceWith(input);
+                }
+                if(qtyEl) { qtyEl.readOnly = false; qtyEl.style.border = '2px solid #667eea'; qtyEl.style.background = 'white'; }
+                if(priceEl) { priceEl.readOnly = false; priceEl.style.border = '2px solid #667eea'; priceEl.style.background = 'white'; }
+                if(btn) btn.innerHTML = '<i class="fas fa-check" style="color:#10b981;font-size:18px;"></i>';
+                btn.onclick = function() { saveInvRowEdit(i); };
+            };
+
+            window.saveInvRowEdit = function(i) {
+                let nameEl = document.getElementById(`invName_${i}`);
+                let qtyEl = document.getElementById(`invQty_${i}`);
+                let priceEl = document.getElementById(`invPrice_${i}`);
+                let name = nameEl ? (nameEl.value !== undefined ? nameEl.value : nameEl.textContent) : '';
+                let qty = parseInt(qtyEl ? qtyEl.value : 0) || 0;
+                let price = parseFloat(priceEl ? priceEl.value : 0) || 0;
+                if(window._inventoryData[i]) {
+                    window._inventoryData[i].name = name.trim() || window._inventoryData[i].name;
+                    window._inventoryData[i].qty = qty;
+                    window._inventoryData[i].price = price;
+                }
+                renderInvRows();
+            };
+
+            let invDelMode = false;
+            window.toggleInvDeleteMode = function() {
+                invDelMode = !invDelMode;
+                document.querySelectorAll('.inv-del-check').forEach(cb => { cb.style.display = invDelMode ? 'inline-block' : 'none'; cb.checked = false; });
+                document.querySelectorAll('.inv-sn').forEach(s => { s.style.display = invDelMode ? 'none' : 'inline'; });
+                document.getElementById('invDeleteSelectedBtn').style.display = invDelMode ? 'block' : 'none';
+                if(invDelMode) showPopup('Select items to delete.');
+            };
+
+            window.deleteSelectedInvItems = function() {
+                let toDelete = [];
+                document.querySelectorAll('.inv-del-check:checked').forEach(cb => toDelete.push(parseInt(cb.getAttribute('data-idx'))));
+                if(toDelete.length === 0) { showPopup('Select at least one item!', false); return; }
+                if(!confirm('Delete ' + toDelete.length + ' selected item(s)?')) return;
+                window._inventoryData = window._inventoryData.filter((_, i) => !toDelete.includes(i));
+                invDelMode = false;
+                document.getElementById('invDeleteSelectedBtn').style.display = 'none';
+                renderInvRows();
+                showPopup('✅ Deleted!');
+            };
+
+            window.saveInventory = function() {
+                (window._inventoryData || []).forEach((item, i) => {
+                    let qtyEl = document.getElementById(`invQty_${i}`);
+                    let priceEl = document.getElementById(`invPrice_${i}`);
+                    let nameEl = document.getElementById(`invName_${i}`);
+                    if(qtyEl) item.qty = parseInt(qtyEl.value) || item.qty;
+                    if(priceEl) item.price = parseFloat(priceEl.value) || item.price;
+                    if(nameEl && nameEl.value !== undefined) item.name = nameEl.value.trim() || item.name;
+                });
+                fsSave('inventoryData', window._inventoryData);
+                localStorage.setItem('eRegister_inventory', JSON.stringify(window._inventoryData));
+                showPopup('✅ Inventory saved successfully!');
+            };
         }
 
         // ==================== ADMISSION ====================
