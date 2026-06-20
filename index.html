@@ -129,9 +129,9 @@
         // REGISTRY_DOC = global login directory (sirf users/coAdmins/notifications/coins/stopApp)
         // Har Admin ka apna alag doc: eRegister/admin_{adminCode} — uska poora data (students,
         // classes, fees, teachers, attendance, etc.) sirf usi doc mein store/load hota hai.
-        const REGISTRY_DOC = db.collection('eRegister').doc('schoolData');
+        const REGISTRY_DOC = db.collection('e-Register').doc('schoolData');
         function getAdminDocRef(adminCode) {
-            return db.collection('eRegister').doc('admin_' + adminCode);
+            return db.collection('e-Register').doc('admin_' + adminCode);
         }
         // SCHOOL_DOC ek dynamic pointer hai: login se pehle REGISTRY_DOC, login ke baad
         // currentUser ke (ya uske parent admin ke) apne doc par switch ho jaata hai.
