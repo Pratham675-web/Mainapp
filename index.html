@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="hi">
 <head>
@@ -2002,88 +2001,202 @@
                 try {
                     const workbook = XLSX.utils.book_new();
                     const students = getAllStudents();
-                    const studentsData = [['Roll No', 'Student Name', 'Father Name', 'Class', 'Contact', 'Type', 'Family ID', 'Admission Number']];
-                    students.forEach(s => {
-                        studentsData.push([s.rollNo, s.name, s.fatherName || 'N/A', s.className, s.contact, s.type, s.familyId || '', s.admissionNumber || '']);
-                    });
-                    const studentsSheet = XLSX.utils.aoa_to_sheet(studentsData);
-                    XLSX.utils.book_append_sheet(workbook, studentsSheet, 'Students');
-                    
-                    const teachersData = [['Name', 'Father Name', 'Contact', 'Gender', 'Qualification']];
-                    teachers.forEach(t => {
-                        teachersData.push([t.name, t.fatherName || 'N/A', t.contact, t.gender || 'N/A', t.qualification || 'N/A']);
-                    });
-                    const teachersSheet = XLSX.utils.aoa_to_sheet(teachersData);
-                    XLSX.utils.book_append_sheet(workbook, teachersSheet, 'Teachers');
-                    
-                    const feesDataRows = [['Class', 'Tuition Fees', 'Exam Fees', ...extraFeeColumns.map(c => c.name)]];
-                    classList.forEach(className => {
-                        const fees = classFeesStructure[className] || { tuitionFees: 0, examFees: 0, extraFees: {} };
-                        const row = [className, fees.tuitionFees, fees.examFees];
-                        extraFeeColumns.forEach(col => {
-                            row.push(fees.extraFees?.[col.name] || 0);
-                        });
-                        feesDataRows.push(row);
-                    });
-                    const feesSheet = XLSX.utils.aoa_to_sheet(feesDataRows);
-                    XLSX.utils.book_append_sheet(workbook, feesSheet, 'Fees Structure');
-                    
                     const todayStr = new Date().toISOString().split('T')[0];
-                    const attendanceData = [['Student Name', 'Last 30 Days Present', 'Last 30 Days Absent', 'Total Present', 'Total Absent']];
-                    students.forEach(s => {
-                        let key = s.name.replace(/\s/g, '_');
-                        let records = attendanceRecords[key] || {};
-                        let last30Present = 0, last30Absent = 0, totalPresent = 0, totalAbsent = 0;
-                        Object.keys(records).forEach(dateStr => {
-                            if(records[dateStr] === 'present') totalPresent++;
-                            if(records[dateStr] === 'absent' || records[dateStr] === 'half') totalAbsent++;
-                            let dateDiff = (new Date(todayStr) - new Date(dateStr)) / (1000 * 3600 * 24);
-                            if(dateDiff <= 30 && dateDiff >= 0) {
-                                if(records[dateStr] === 'present') last30Present++;
-                                if(records[dateStr] === 'absent' || records[dateStr] === 'half') last30Absent++;
-                            }
+                    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+                    // ── SHEET A: Class-wise Students List ──
+                    const classStudentData = [['Class', 'Roll No', 'Student Name', 'Father Name', 'Mother Name', 'Contact', 'Gender', 'Type', 'Family Name', 'Admission Number', 'DOB', 'Address']];
+                    const sortedStudents = [...students].sort((a,b) => (a.className||'').localeCompare(b.className||'') || (a.name||'').localeCompare(b.name||''));
+                    sortedStudents.forEach(s => {
+                        classStudentData.push([s.className||'', s.rollNo||'', s.name||'', s.fatherName||'N/A', s.motherName||'N/A', s.contact||'', s.gender||'N/A', s.type||'single', s.familyName||'', s.admissionNumber||'', s.dob||'', s.address||'']);
+                    });
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(classStudentData), 'A-Students Class-wise');
+
+                    // ── SHEET A2: Class-wise Attendance ──
+                    const attData = [['Class', 'Student Name', 'Roll No', 'Total Present', 'Total Absent', 'Total Half-Day', 'Last 30D Present', 'Last 30D Absent', 'Attendance %']];
+                    sortedStudents.forEach(s => {
+                        let key = s.name.replace(/\s/g,'_');
+                        let rec = attendanceRecords[key] || {};
+                        let totP=0, totA=0, totH=0, l30P=0, l30A=0;
+                        Object.keys(rec).forEach(d => {
+                            let v = rec[d];
+                            if(v==='present') totP++;
+                            else if(v==='absent') totA++;
+                            else if(v==='half') totH++;
+                            let diff=(new Date(todayStr)-new Date(d))/(86400000);
+                            if(diff>=0&&diff<=30){ if(v==='present') l30P++; else if(v==='absent'||v==='half') l30A++; }
                         });
-                        attendanceData.push([s.name, last30Present, last30Absent, totalPresent, totalAbsent]);
+                        let total = totP+totA+totH;
+                        let pct = total>0 ? (totP/total*100).toFixed(1)+'%' : 'N/A';
+                        attData.push([s.className||'', s.name||'', s.rollNo||'', totP, totA, totH, l30P, l30A, pct]);
                     });
-                    const attendanceSheet = XLSX.utils.aoa_to_sheet(attendanceData);
-                    XLSX.utils.book_append_sheet(workbook, attendanceSheet, 'Attendance');
-                    
-                    const paymentData = [['Student Name', 'Total Payments', 'Total Amount Paid', 'Last Payment Date']];
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(attData), 'A-Attendance Students');
+
+                    // ── SHEET B: Teachers List + Attendance ──
+                    const teacherData = [['Name', 'Father Name', 'Contact', 'Gender', 'Qualification', 'Subject', 'Address', 'Total Present', 'Total Absent', 'Attendance %']];
+                    teachers.forEach(t => {
+                        let key = (t.name||'').replace(/\s/g,'_');
+                        let rec = attendanceRecords['teacher_'+key] || attendanceRecords[key] || {};
+                        let totP=0,totA=0;
+                        Object.keys(rec).forEach(d=>{ let v=rec[d]; if(v==='present') totP++; else if(v==='absent'||v==='half') totA++; });
+                        let total=totP+totA;
+                        let pct=total>0?(totP/total*100).toFixed(1)+'%':'N/A';
+                        teacherData.push([t.name||'', t.fatherName||'N/A', t.contact||'', t.gender||'N/A', t.qualification||'N/A', t.subject||'N/A', t.address||'', totP, totA, pct]);
+                    });
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(teacherData), 'B-Teachers & Attendance');
+
+                    // ── SHEET C: Day Book (Income + Expense + Activities) ──
+                    const dayBookData = [['Date', 'Time', 'Type', 'Category', 'Name/Party', 'Items/Description', 'Amount', 'Mode', 'Admin', 'Remark']];
+                    let allQP = [...(quickPayments||[])].sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
+                    allQP.forEach(p => {
+                        let items = Array.isArray(p.items) ? p.items.map(it=>`${it.item}×${it.qty||1}`).join(', ') : (p.item||p.description||'—');
+                        dayBookData.push([p.date||'', p.time||'', p.type==='income'?'Income':'Expense', p.category||'', p.name||p.party||'', items, p.amount||p.total||0, p.modeOfPayment||p.mode||'', p.submittedBy||'', p.remark||'']);
+                    });
+                    let allActivities = [...(activityLog||[])].sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
+                    allActivities.forEach(a => {
+                        dayBookData.push([a.date||'', a.time||'', 'Activity', a.type||'', a.user||'', a.description||a.details||'', '', '', a.user||'', '']);
+                    });
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(dayBookData), 'C-Day Book');
+
+                    // ── SHEET D: Fees Details (All Students, All Months, Balance, Advance) ──
+                    const feesDetailData = [['Class', 'Student Name', 'Roll No', 'Contact', 'Month(s)', 'Tuition Fees', 'Exam Fees', ...feesColumns.filter(c=>c.toLowerCase().replace(/\s/,'')!=='tuitionfees'), 'Total', 'Discount', 'After Discount', 'Submitted', 'Balance/Advance', 'Mode', 'FC No', 'Date']];
+                    sortedStudents.forEach(s => {
+                        let hist = paymentHistory[s.id] || [];
+                        if(hist.length === 0) {
+                            feesDetailData.push([s.className||'', s.name||'', s.rollNo||'', s.contact||'', 'No Records', 0, 0, ...feesColumns.filter(c=>c.toLowerCase().replace(/\s/,'')!=='tuitionfees').map(()=>0), 0, 0, 0, 0, 'N/A', '', '', '']);
+                        } else {
+                            hist.forEach(h => {
+                                let bal = h.balance || 0;
+                                let balLabel = bal < 0 ? 'Advance ₹'+Math.abs(bal) : (bal > 0 ? 'Balance ₹'+bal : 'Clear');
+                                let extraCols = feesColumns.filter(c=>c.toLowerCase().replace(/\s/,'')!=='tuitionfees').map(c => (h.fees&&h.fees[c]!==undefined)?h.fees[c]:0);
+                                feesDetailData.push([s.className||'', s.name||'', s.rollNo||'', s.contact||'', (h.months||[]).join(', '), h.fees&&h.fees['Tuition Fees']?h.fees['Tuition Fees']:0, h.examFees||0, ...extraCols, h.memberTotal||0, h.discount||0, (h.memberTotal||0)-(h.discount||0), h.submittedAmount||h.amount||0, balLabel, h.modeOfPayment||'', h.fcNumber||'', h.date||'']);
+                            });
+                        }
+                    });
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(feesDetailData), 'D-Fees Details');
+
+                    // ── SHEET E: Quick Payment Details ──
+                    const qpData = [['Date', 'Time', 'Type', 'Party / Name', 'Items', 'Total Amount', 'Discount', 'Submitted', 'Balance/Advance', 'Mode', 'Submitted By', 'Remark']];
+                    allQP.forEach(p => {
+                        let items = Array.isArray(p.items) ? p.items.map(it=>`${it.item}×${it.qty||1}=₹${it.amount||0}`).join('; ') : (p.item||'—');
+                        let bal = (p.balance||0);
+                        let balLabel = bal<0 ? 'Advance ₹'+Math.abs(bal) : (bal>0 ? 'Balance ₹'+bal : 'Clear');
+                        qpData.push([p.date||'', p.time||'', p.type==='income'?'Income':'Expense', p.name||p.party||'', items, p.total||p.amount||0, p.discount||0, p.submitted||p.amount||0, balLabel, p.modeOfPayment||p.mode||'', p.submittedBy||'', p.remark||'']);
+                    });
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(qpData), 'E-Quick Payments');
+
+                    // ── SHEET F: Family Students + Free Students ──
+                    const familyData = [['Family Name', 'Family ID', 'Student Name', 'Class', 'Roll No', 'Contact', 'Type', 'Free Status', 'Free Type', 'Tuition Free', 'Exam Free', 'Additional Free']];
                     students.forEach(s => {
-                        let history = paymentHistory[s.id] || [];
-                        let totalPaid = history.reduce((sum, h) => sum + (h.submittedAmount || h.amount || 0), 0);
-                        let lastDate = history.length > 0 ? history[history.length - 1].date : 'N/A';
-                        paymentData.push([s.name, history.length, totalPaid, lastDate]);
+                        let freeInfo = freeStudentsList ? freeStudentsList.find(f=>String(f.studentId)===String(s.id)) : null;
+                        let freeStatus = freeInfo ? 'Yes' : 'No';
+                        let freeType = freeInfo ? (freeInfo.freeType||'everything') : '';
+                        let tuFree = freeInfo ? (freeInfo.tuition||freeInfo.freeType==='tuition'||freeInfo.freeType==='everything' ? 'Yes':'No') : 'No';
+                        let exFree = freeInfo ? (freeInfo.exam||freeInfo.freeType==='exam'||freeInfo.freeType==='everything' ? 'Yes':'No') : 'No';
+                        let addFree = freeInfo ? (freeInfo.additional||freeInfo.freeType==='additional'||freeInfo.freeType==='everything' ? 'Yes':'No') : 'No';
+                        if(s.type==='family' || freeInfo) {
+                            familyData.push([s.familyName||'', s.familyId||'', s.name||'', s.className||'', s.rollNo||'', s.contact||'', s.type||'', freeStatus, freeType, tuFree, exFree, addFree]);
+                        }
                     });
-                    const paymentSheet = XLSX.utils.aoa_to_sheet(paymentData);
-                    XLSX.utils.book_append_sheet(workbook, paymentSheet, 'Payment Summary');
-                    
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(familyData), 'F-Family & Free Students');
+
+                    // ── SHEET G: Fees & Charges Structure ──
+                    const chargesData = [['Class', 'Tuition Fees (Monthly)', 'Exam Fees', ...feesColumns.filter(c=>c.toLowerCase().replace(/\s/,'')!=='tuitionfees')]];
+                    classList.forEach(cls => {
+                        let cf = classFeesStructure[cls] || {};
+                        let extraVals = feesColumns.filter(c=>c.toLowerCase().replace(/\s/,'')!=='tuitionfees').map(c=>{
+                            let ec = extraFeeColumns ? extraFeeColumns.find(e=>e.name===c) : null;
+                            return ec ? (ec.amount||0) : (cf.extraFees&&cf.extraFees[c]||0);
+                        });
+                        chargesData.push([cls, cf.tuitionFees||0, cf.examFees||0, ...extraVals]);
+                    });
+                    chargesData.push([]);
+                    chargesData.push(['=== Item Fees ===']);
+                    chargesData.push(['Item Name', 'Price']);
+                    (itemsFees||[]).forEach(item => chargesData.push([item.name||'', item.price||item.amount||0]));
+                    chargesData.push([]);
+                    chargesData.push(['=== Book Fees ===']);
+                    chargesData.push(['Book Name', 'Price', 'Class']);
+                    (booksFees||[]).forEach(book => chargesData.push([book.name||'', book.price||book.amount||0, book.className||'']));
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(chargesData), 'G-Charges & Fees Structure');
+
+                    // ── SHEET H: Default List (Last Month Pending) ──
+                    const nowDate = new Date();
+                    const lastMonth = nowDate.getMonth() === 0 ? 11 : nowDate.getMonth() - 1;
+                    const lastMonthName = monthNames[lastMonth];
+                    const defaultData = [['Class', 'Student Name', 'Roll No', 'Contact', 'Last Payment Date', 'Balance/Advance', 'Pending Months', 'Last Submitted', 'FC Number']];
+                    sortedStudents.forEach(s => {
+                        let hist = paymentHistory[s.id] || [];
+                        let lastRec = hist.length > 0 ? hist[hist.length-1] : null;
+                        let bal = lastRec ? (lastRec.balance||0) : 0;
+                        let balLabel = bal<0 ? 'Advance ₹'+Math.abs(bal) : (bal>0 ? 'Balance ₹'+bal : 'Clear');
+                        let paidMonths = [];
+                        hist.forEach(h => { (h.months||[]).forEach(m=>{ if(!paidMonths.includes(m)) paidMonths.push(m); }); });
+                        let allMonthsPaid = paidMonths.includes(lastMonthName);
+                        if(!allMonthsPaid || bal > 0) {
+                            let pendingMonths = monthNames.filter(m => !paidMonths.includes(m)).join(', ') || 'All Paid';
+                            defaultData.push([s.className||'', s.name||'', s.rollNo||'', s.contact||'', lastRec?lastRec.date:'Never', balLabel, pendingMonths, lastRec?(lastRec.submittedAmount||lastRec.amount||0):0, lastRec?(lastRec.fcNumber||''):'']);
+                        }
+                    });
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(defaultData), 'H-Default List');
+
+                    // ── SHEET I: Fees Transaction History ──
+                    const txnData = [['Class', 'Student Name', 'Roll No', 'Contact', 'Date', 'Month(s)', 'Member Total', 'Discount', 'Submitted', 'Balance', 'Old Balance', 'Mode', 'FC Number', 'Receipt No', 'Submitted By', 'Remark']];
+                    sortedStudents.forEach(s => {
+                        let hist = paymentHistory[s.id] || [];
+                        hist.forEach(h => {
+                            let bal = h.balance||0;
+                            let balLabel = bal<0 ? 'Advance ₹'+Math.abs(bal) : (bal>0 ? 'Balance ₹'+bal : 'Clear');
+                            let oldBal = h.oldBalance||0;
+                            let oldBalLabel = oldBal<0 ? 'Advance ₹'+Math.abs(oldBal) : (oldBal>0 ? 'Balance ₹'+oldBal : 'Clear');
+                            txnData.push([s.className||'', s.name||'', s.rollNo||'', s.contact||'', h.date||'', (h.months||[]).join(', '), h.memberTotal||0, h.discount||0, h.submittedAmount||h.amount||0, balLabel, oldBalLabel, h.modeOfPayment||'', h.fcNumber||'', h.receiptNo||'', h.submittedBy||'', h.remark||'']);
+                        });
+                    });
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(txnData), 'I-Transaction History');
+
+                    // ── SHEET J: Admin & Co-Admin Details ──
+                    const adminData = [['Role', 'Name', 'Contact / Username', 'Plan', 'Total Coins', 'Expiry', 'Status']];
+                    if(currentUser) {
+                        adminData.push(['Admin', currentUser.name||'', currentUser.contact||currentUser.username||'', currentUser.plan||'Basic', currentUser.coins||0, currentUser.planExpiry||currentUser.expiry||'N/A', 'Active']);
+                    }
+                    let coAdminsList = [];
+                    try { coAdminsList = JSON.parse(localStorage.getItem('eRegister_coAdmins')||'[]'); } catch(e){}
+                    coAdminsList.forEach(ca => {
+                        adminData.push(['Co-Admin', ca.name||'', ca.contact||ca.username||'', ca.plan||'—', ca.coins||0, ca.expiry||'N/A', ca.active===false?'Inactive':'Active']);
+                    });
+                    adminData.push([]);
+                    adminData.push(['=== App Info ===']);
+                    adminData.push(['Export Date', new Date().toLocaleString()]);
+                    adminData.push(['Total Students', students.length]);
+                    adminData.push(['Total Teachers', teachers.length]);
+                    adminData.push(['Total Classes', classList.length]);
+                    adminData.push(['Total Payment Records', Object.values(paymentHistory).reduce((s,h)=>s+h.length,0)]);
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(adminData), 'J-Admin & Plan Details');
+
+                    // ── JSON Backup Sheet (for restore) ──
                     const jsonBackup = {
-                        exportDate: new Date().toLocaleString(),
-                        version: '1.0',
-                        admissions, teachers, attendanceRecords, paymentHistory, 
+                        exportDate: new Date().toLocaleString(), version: '1.0',
+                        admissions, teachers, attendanceRecords, paymentHistory,
                         examResults, classFeesStructure, feesData, feesColumns,
                         classList, itemsFees, booksFees, admissionSettings, extraFeeColumns,
                         freeStudentsList, billingSaved, editSettings, examFeesMonthWise,
                         quickPayments, selectedWallpaper
                     };
                     const jsonStr = JSON.stringify(jsonBackup, null, 2);
-                    const jsonSheetData = [['JSON Backup Data - For Restore Only'], ['==================='], [jsonStr]];
-                    const jsonSheet = XLSX.utils.aoa_to_sheet(jsonSheetData);
-                    XLSX.utils.book_append_sheet(workbook, jsonSheet, 'JSON_Backup');
-                    
-                    const fileName = `eRegister_Backup_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`;
+                    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['JSON Backup Data - For Restore Only'],['====================='],[jsonStr]]), 'JSON_Backup');
+
+                    const fileName = `eRegister_Backup_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.xlsx`;
                     XLSX.writeFile(workbook, fileName);
-                    
+
                     const jsonBlob = new Blob([jsonStr], { type: 'application/json' });
                     const jsonUrl = URL.createObjectURL(jsonBlob);
                     const jsonA = document.createElement('a');
                     jsonA.href = jsonUrl;
-                    jsonA.download = `eRegister_Backup_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.json`;
+                    jsonA.download = `eRegister_Backup_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.json`;
                     jsonA.click();
                     URL.revokeObjectURL(jsonUrl);
-                    
-                    showPopup('✅ Backup completed! Excel and JSON files downloaded.', true);
+
+                    showPopup('✅ Backup completed! 10-sheet Excel + JSON downloaded.', true);
                     btn.disabled = false;
                     btn.innerHTML = '<i class="fas fa-download"></i> Start Excel Backup';
                     setTimeout(() => {
@@ -2415,11 +2528,13 @@
                 </div>`;
             });
             let editBtnHtml = editSettings.balanceEditable ? ('&nbsp;<button class="edit-icon-big" onclick="makeEditable(\'' + (primaryMember?.id) + '\', \'' + (primaryMember?.id) + '\')"><img src="' + img.editIcon + '"></button>') : '';
+            let isAdvance = lastBalance < 0;
+            let advanceAmt = Math.abs(lastBalance);
             historyHtml += `</div>
-            <div style="margin-top:12px; padding:12px 16px; background:#fff3cd; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:700; color:#333;"><i class="fas fa-wallet"></i> Outstanding Balance:</span>
+            <div style="margin-top:12px; padding:12px 16px; background:${isAdvance ? '#dcfce7' : '#fff3cd'}; border:2px solid ${isAdvance ? '#10b981' : '#f59e0b'}; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:700; color:${isAdvance ? '#065f46' : '#333'};"><i class="fas fa-${isAdvance ? 'plus-circle' : 'wallet'}"></i> ${isAdvance ? 'Outstanding Advance:' : 'Outstanding Balance:'}</span>
                 <span>
-                    <span id="balance_${primaryMember?.id}" class="old-balance-text" style="font-size:18px;">₹${lastBalance}</span>
+                    <span id="balance_${primaryMember?.id}" class="old-balance-text" style="font-size:18px; color:${isAdvance ? '#10b981' : '#333'}; font-weight:800;">${isAdvance ? '+₹' + advanceAmt : '₹' + lastBalance}</span>
                     ${editBtnHtml}
                 </span>
             </div>`;
@@ -3826,11 +3941,24 @@
                 rowTotals.forEach(rowTotal => {
                     grandTotal += parseFloat(rowTotal.value) || 0;
                 });
-                let oldBalance = parseFloat(document.getElementById('oldBalance').innerText) || 0;
+                let oldBalEl = document.getElementById('oldBalance');
+                let oldBalance = parseFloat(oldBalEl ? (oldBalEl.getAttribute('data-raw') || oldBalEl.innerText) : '0') || 0;
                 let finalGrandTotal = grandTotal + oldBalance;
                 let discInput = parseFloat(document.getElementById('discountAmount').value) || 0;
                 let discount = (window._discMode === 'percent') ? Math.round(finalGrandTotal * discInput / 100) : discInput;
                 let afterDiscount = finalGrandTotal - discount;
+
+                // Show yellow calculation text when advance exists
+                let calcTextEl = document.getElementById('advanceCalcText');
+                let settledMsgEl = document.getElementById('advanceSettledMsg');
+                if(oldBalance < 0 && grandTotal > 0) {
+                    let advAmt = Math.abs(oldBalance);
+                    if(calcTextEl) { calcTextEl.style.display = 'inline'; calcTextEl.innerText = grandTotal + '-' + advAmt + '=' + finalGrandTotal; }
+                    if(settledMsgEl) settledMsgEl.style.display = 'block';
+                } else {
+                    if(calcTextEl) calcTextEl.style.display = 'none';
+                    if(settledMsgEl && oldBalance >= 0) settledMsgEl.style.display = 'none';
+                }
 
                 // Check if Cash & Paytm mode is selected
                 let mopRadios = document.querySelectorAll('input[name="modeOfPayment"]');
@@ -4006,8 +4134,12 @@
                     </div>
                 </div>
                 <div class="calculation-box">
-                    <div class="calculation-row"><span style="color:#ef4444; font-weight:700;">Old Balance:</span><span id="oldBalance" class="old-balance-text">${oldBalanceAmount}</span></div>
-                    <div class="calculation-row"><span>Grand Total (with Old Balance):</span><span id="grandTotal" class="total-text">0</span></div>
+                    <div class="calculation-row">
+                        <span style="color:${oldBalanceAmount < 0 ? '#10b981' : '#ef4444'}; font-weight:700;">${oldBalanceAmount < 0 ? '<i class="fas fa-plus-circle"></i> Advance Balance:' : 'Old Balance:'}</span>
+                        <span id="oldBalance" data-raw="${oldBalanceAmount}" class="old-balance-text" style="color:${oldBalanceAmount < 0 ? '#10b981' : ''}; font-weight:${oldBalanceAmount < 0 ? '800' : ''};">${oldBalanceAmount < 0 ? '+₹' + Math.abs(oldBalanceAmount) : oldBalanceAmount}</span>
+                    </div>
+                    <div class="calculation-row"><span>Grand Total${oldBalanceAmount < 0 ? ' (after Advance)' : ' (with Old Balance)'}:</span><span id="grandTotal" class="total-text">0</span><span id="advanceCalcText" style="margin-left:10px;font-size:12px;font-weight:700;color:#b45309;background:#fef3c7;padding:3px 10px;border-radius:8px;display:none;"></span></div>
+                    ${oldBalanceAmount < 0 ? '<div id="advanceSettledMsg" style="color:#10b981;font-size:12px;font-weight:700;margin:2px 0 6px 0;"><i class="fas fa-check-circle"></i> advance balance automatically settled in fees</div>' : '<div id="advanceSettledMsg" style="display:none;"></div>'}
                     <div class="calculation-row">
                         <span>Discount:
                             <span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;background:#f0f0f0;border-radius:20px;padding:2px 6px;">
@@ -6412,7 +6544,41 @@
                                 <img src="${img.profitLossIcon}" style="width:56px;height:56px;border-radius:12px;">
                             </button>
                             <button onclick="navigateTo(renderCombineDetails)" style="background:none;border:none;cursor:pointer;padding:0;" title="Combine Details">
-                                <img src="${img.combineDetailIcon}" style="width:56px;height:56px;border-radius:12px;" onerror="this.onerror=null;this.src='';this.parentNode.innerHTML='<span style=\'background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:10px 14px;border-radius:12px;font-size:14px;font-weight:700;display:inline-block;\'>📊</span>'">
+                                <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" style="border-radius:14px;display:block;">
+                                    <defs>
+                                        <linearGradient id="cdGrad" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                                            <stop offset="0%" stop-color="#7c3aed"/>
+                                            <stop offset="100%" stop-color="#4f46e5"/>
+                                        </linearGradient>
+                                    </defs>
+                                    <rect width="56" height="56" rx="14" fill="url(#cdGrad)"/>
+                                    <!-- Table grid -->
+                                    <rect x="10" y="13" width="36" height="30" rx="3" fill="white" fill-opacity="0.15"/>
+                                    <!-- Header row -->
+                                    <rect x="10" y="13" width="36" height="8" rx="3" fill="white" fill-opacity="0.35"/>
+                                    <!-- Column dividers -->
+                                    <line x1="22" y1="13" x2="22" y2="43" stroke="white" stroke-opacity="0.3" stroke-width="1"/>
+                                    <line x1="34" y1="13" x2="34" y2="43" stroke="white" stroke-opacity="0.3" stroke-width="1"/>
+                                    <!-- Row dividers -->
+                                    <line x1="10" y1="29" x2="46" y2="29" stroke="white" stroke-opacity="0.3" stroke-width="1"/>
+                                    <line x1="10" y1="37" x2="46" y2="37" stroke="white" stroke-opacity="0.3" stroke-width="1"/>
+                                    <!-- Highlighted submitted cell (green) -->
+                                    <rect x="34" y="21" width="12" height="8" rx="1.5" fill="#10b981" fill-opacity="0.85"/>
+                                    <!-- Rupee symbol in green cell -->
+                                    <text x="40" y="27.5" text-anchor="middle" font-size="6" font-weight="bold" fill="white" font-family="Arial">₹</text>
+                                    <!-- Data bars in other cells -->
+                                    <rect x="12" y="24" width="7" height="2" rx="1" fill="white" fill-opacity="0.6"/>
+                                    <rect x="24" y="24" width="7" height="2" rx="1" fill="white" fill-opacity="0.6"/>
+                                    <rect x="12" y="32" width="9" height="2" rx="1" fill="white" fill-opacity="0.6"/>
+                                    <rect x="24" y="32" width="5" height="2" rx="1" fill="white" fill-opacity="0.6"/>
+                                    <rect x="36" y="32" width="7" height="2" rx="1" fill="#f59e0b" fill-opacity="0.9"/>
+                                    <rect x="12" y="40" width="6" height="2" rx="1" fill="white" fill-opacity="0.6"/>
+                                    <rect x="24" y="40" width="8" height="2" rx="1" fill="white" fill-opacity="0.6"/>
+                                    <rect x="36" y="40" width="7" height="2" rx="1" fill="#10b981" fill-opacity="0.8"/>
+                                    <!-- Small combine/merge arrows -->
+                                    <circle cx="46" cy="13" r="7" fill="#10b981"/>
+                                    <text x="46" y="16.5" text-anchor="middle" font-size="8" fill="white" font-family="Arial">⊞</text>
+                                </svg>
                             </button>
                         </div>
                     </div>
@@ -6764,29 +6930,52 @@
                 if(!selected.length) { showPopup('Koi row select nahi ki!', false); return; }
                 let nameEl = document.getElementById('cdNameInput');
                 let name = nameEl ? nameEl.value.trim() : 'Party';
+                let totalBilled = 0, totalSubmitted = 0, totalDiscount = 0;
+                let lastBalAmt = 0, lastBalType = 'clear';
+                selected.forEach(e => { totalBilled += (e.total||0); totalSubmitted += (e.submitted||0); totalDiscount += (e.discount||0); });
+                if(selected.length > 0) {
+                    let last = selected[selected.length-1];
+                    let adv = last.advance||0;
+                    if(adv===0&&(last.balance||0)<0) adv=Math.abs(last.balance);
+                    let bal = Math.max(0,last.balance||0);
+                    if(adv>0) { lastBalAmt = adv; lastBalType='advance'; }
+                    else if(bal>0) { lastBalAmt = bal; lastBalType='balance'; }
+                }
+                let now = new Date();
+                let printDateTime = now.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) + ' ' + now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
                 let rows = selected.map(e => {
                     let adv = e.advance||0;
                     if(adv===0&&(e.balance||0)<0) adv=Math.abs(e.balance);
                     let bal = Math.max(0,e.balance||0);
                     let items = Array.isArray(e.items)&&e.items.length ? e.items.map(it=>`${it.item}×${it.qty}`).join(', ') : (e.item||'—');
+                    let balCell = adv>0 ? `<span style="color:#10b981;font-weight:700;">+₹${adv} Adv</span>` : `<span style="color:#dc2626;">₹${bal}</span>`;
                     return `<tr style="border-bottom:1px solid #e0e0e0;">
                         <td style="padding:5px 8px;font-size:11px;">${e.date}<br><span style="color:#999;font-size:9px;">${e.time||''}</span></td>
                         <td style="padding:5px 8px;font-size:11px;">${items}</td>
                         <td style="padding:5px 8px;font-size:11px;text-align:right;">₹${e.discount||0}</td>
                         <td style="padding:5px 8px;font-size:12px;font-weight:700;text-align:right;color:#ef4444;">₹${e.total||0}</td>
-                        <td style="padding:5px 8px;font-size:11px;text-align:right;color:#059669;">₹${e.submitted||0}</td>
-                        <td style="padding:5px 8px;font-size:11px;text-align:right;">${adv>0?`+₹${adv} Adv`:`₹${bal}`}</td>
+                        <td style="padding:5px 8px;font-size:11px;text-align:right;color:#059669;font-weight:700;">₹${e.submitted||0}</td>
+                        <td style="padding:5px 8px;font-size:11px;text-align:right;">${balCell}</td>
                         <td style="padding:5px 8px;font-size:11px;">${e.modeOfPayment||'—'}</td>
                     </tr>`;
                 }).join('');
+                let summaryBg = lastBalType==='advance' ? '#dcfce7' : (lastBalType==='balance' ? '#fee2e2' : '#f0fdf4');
+                let summaryColor = lastBalType==='advance' ? '#065f46' : (lastBalType==='balance' ? '#991b1b' : '#059669');
+                let summaryLabel = lastBalType==='advance' ? `Advance: +₹${lastBalAmt}` : (lastBalType==='balance' ? `Balance Due: ₹${lastBalAmt}` : 'Balance Clear ✓');
                 let html = buildPrintHeader()
-                    + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                         <span style="font-size:16px;font-weight:800;color:#1a1a2e;">Combine Details — ${name}</span>
-                         <span style="font-size:10px;color:#888;">${new Date().toLocaleDateString('en-IN')}</span>
+                    + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                         <span style="font-size:15px;font-weight:800;color:#1a1a2e;"><i class="fas fa-table"></i> Combine Details — ${name}</span>
+                         <span style="font-size:10px;color:#555;font-weight:600;">Printed: ${printDateTime}</span>
+                       </div>
+                       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;padding:8px 12px;background:#f8f9ff;border-radius:10px;font-size:12px;">
+                         <span><b>Total Billed:</b> <span style="color:#ef4444;font-weight:700;">₹${totalBilled}</span></span>
+                         <span><b>Total Discount:</b> <span style="color:#f59e0b;font-weight:700;">₹${totalDiscount}</span></span>
+                         <span><b>Total Submitted:</b> <span style="color:#059669;font-weight:700;">₹${totalSubmitted}</span></span>
+                         <span style="margin-left:auto;background:${summaryBg};color:${summaryColor};padding:3px 12px;border-radius:8px;font-weight:800;">${summaryLabel}</span>
                        </div>`
                     + `<table style="width:100%;border-collapse:collapse;font-size:11px;">`
-                    + `<thead><tr style="background:#ef4444;color:white;">
-                         <th style="padding:5px 8px;text-align:left;">Date</th>
+                    + `<thead><tr style="background:#667eea;color:white;">
+                         <th style="padding:5px 8px;text-align:left;">Date &amp; Time</th>
                          <th style="padding:5px 8px;text-align:left;">Items</th>
                          <th style="padding:5px 8px;text-align:right;">Disc</th>
                          <th style="padding:5px 8px;text-align:right;">Total</th>
@@ -6794,7 +6983,16 @@
                          <th style="padding:5px 8px;text-align:right;">Bal/Adv</th>
                          <th style="padding:5px 8px;text-align:left;">Mode</th>
                        </tr></thead>`
-                    + `<tbody>${rows}</tbody></table>`;
+                    + `<tbody>${rows}</tbody>`
+                    + `<tfoot><tr style="background:#f1f5f9;">
+                         <td colspan="2" style="padding:6px 8px;font-size:11px;font-weight:700;">TOTAL (${selected.length} entries)</td>
+                         <td style="padding:6px 8px;text-align:right;font-weight:700;">₹${totalDiscount}</td>
+                         <td style="padding:6px 8px;text-align:right;color:#ef4444;font-weight:800;">₹${totalBilled}</td>
+                         <td style="padding:6px 8px;text-align:right;color:#059669;font-weight:800;">₹${totalSubmitted}</td>
+                         <td style="padding:6px 8px;text-align:right;font-weight:800;color:${summaryColor};">${summaryLabel}</td>
+                         <td></td>
+                       </tr></tfoot>`
+                    + `</table>`;
                 doPrint(html);
             };
 
