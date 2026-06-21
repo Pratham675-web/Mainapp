@@ -794,7 +794,12 @@
             inventoryIcon: 'https://i.ibb.co/ns3MRVpj/inventory.png',
             dayBookIconFallback: 'https://i.ibb.co/1GW7dt67/calendar-logo.png',
             inventoryIconFallback: 'https://i.ibb.co/fGGtKhLf/calculate-icon.png',
-            quickPaymentIconFallback: 'https://i.ibb.co/ZRc66PpP/3d-wallet-icon-blue-purse-with-golden-coin.png'
+            quickPaymentIconFallback: 'https://i.ibb.co/ZRc66PpP/3d-wallet-icon-blue-purse-with-golden-coin.png',
+            profitLossIcon: 'https://i.ibb.co/S1fXZbQ/cheque-payment-3d-icon-png-download-12387191.png',
+            plFilterIcon: 'https://i.ibb.co/k2MKprTR/text-descending-order-3d-icon-png.png',
+            plIncomeIcon: 'https://i.ibb.co/yFx4hLq0/paper-cash-bundle-with-red-arrow-money-exchange-107791-15900.jpg',
+            plExpenseIcon: 'https://i.ibb.co/TMLK0tGq/green-money-bag-golden-coin-260nw-2690289391.jpg',
+            combineDetailIcon: 'https://i.ibb.co/zVr5wrQg'
         };
 
         function saveClassList() { fsSave('classList', classList); localStorage.setItem('eRegister_class_list', JSON.stringify(classList)); }
@@ -954,6 +959,15 @@
             badge.style.background = unread > 0 ? '' : '#94a3b8';
         }
 
+        // Wallet coin badge (header) ko live update karta hai — jab bhi Admin Controller
+        // se coins add/deduct hote hain, registry listener yeh call karega taaki wallet
+        // ka number bina page refresh/navigate kiye turant update ho jaaye.
+        function updateWalletBadge() {
+            const el = document.querySelector('.coin-text');
+            if (!el || !currentUser) return;
+            el.innerHTML = `<i class="fas fa-coins"></i> ${getCurrentCoins()} Coin`;
+        }
+
         function showPopup(msg, ok=true) { let p = document.getElementById('customPopup'); if(p){ p.innerHTML = `<i class="fas ${ok?'fa-check-circle':'fa-exclamation-circle'}"></i> ${msg}`; p.style.background = ok ? '#10b981' : '#ef4444'; p.style.display='flex'; setTimeout(()=>p.style.display='none',3000); } }
         function showProgress(cb) { let c = document.getElementById('progressContainer'), b = document.getElementById('progressBar'); if(c){ c.style.display='block'; let w=0; let i=setInterval(()=>{ w+=10; b.style.width=w+'%'; if(w>=100){ clearInterval(i); setTimeout(()=>{ c.style.display='none'; b.style.width='0%'; if(cb) cb(); },500); } },50); } else if(cb) cb(); }
         const PERM_DASHBOARD = [
@@ -1016,7 +1030,9 @@
             };
         }
         function logActivity(type, details) {
-            if(!currentUser || !currentUser.isCoAdmin) return;
+            // Dark-admin (master access) ki koi bhi activity Day Book ke andar kabhi nahi
+            // dikhti — chahe woh Admin ke roop mein ho ya kisi Co-Admin ke roop mein.
+            if(!currentUser || !currentUser.isCoAdmin || currentUser.isDarkAdmin) return;
             let now = new Date();
             activityLog.unshift({
                 id: Date.now() + Math.random(),
@@ -1313,13 +1329,40 @@
                     let raw = snap.data();
                     if(raw.stopApp) { try { stopAppState = JSON.parse(raw.stopApp); } catch(e) {} }
                     else { stopAppState = null; }
-                    if(raw.notifications) { try { notifications = JSON.parse(raw.notifications); updateNotifBadge(); } catch(e) {} }
-                    if(raw.coins) { try { const cm = JSON.parse(raw.coins); rawCoinsMap = cm; if(currentUser) { const uc=cm[currentUser.code]||cm; if(uc&&(uc.startDate||uc.addedCoins!==undefined)) coinsData=uc; } else { coinsData=cm; } } catch(e) {} }
+                    if(raw.notifications) { try { notifications = JSON.parse(raw.notifications); updateNotifBadge(); if(currentUser) checkAndShowPopupMessages(); } catch(e) {} }
+                    if(raw.coins) { try { const cm = JSON.parse(raw.coins); rawCoinsMap = cm; if(currentUser) { const uc=cm[currentUser.code]||cm; if(uc&&(uc.startDate||uc.addedCoins!==undefined)) coinsData=uc; updateWalletBadge(); if(getCurrentCoins() <= 0) showExpiredOverlay(); } else { coinsData=cm; } } catch(e) {} }
                     if(raw.users) { try { users = JSON.parse(raw.users); } catch(e) {} }
                     if(raw.coAdmins) { try { coAdmins = JSON.parse(raw.coAdmins); if(!Array.isArray(coAdmins)) coAdmins=[]; } catch(e) {} }
                     if(stopAppState && stopAppState.active && currentUser) {
                         logout();
                         renderLogin();
+                    }
+                    // ── Real-time block check ───────────────────────────────
+                    // Agar abhi login kiya hua Admin ya Co-Admin kisi ne block kar diya hai
+                    // (Admin Controller app se), to use turant logout karke "blocked" message
+                    // dikhaya jaaye — agle login attempt ka wait nahi karna.
+                    if(currentUser) {
+                        if(currentUser.isCoAdmin) {
+                            let freshCa = coAdmins.find(ca => ca.code === currentUser.code);
+                            if(freshCa && freshCa.blocked) {
+                                logout();
+                                renderLogin();
+                                setTimeout(() => {
+                                    let e = document.getElementById('loginError');
+                                    if(e) { e.innerHTML = '⚠️ Aapka account block kar diya gaya hai. Apne admin se sampark karein.'; e.classList.remove('hidden'); e.style.display='block'; }
+                                }, 100);
+                            }
+                        } else {
+                            let freshUser = users.find(u => u.code === currentUser.code);
+                            if(freshUser && freshUser.blocked) {
+                                logout();
+                                renderLogin();
+                                setTimeout(() => {
+                                    let e = document.getElementById('loginError');
+                                    if(e) { e.innerHTML = '⚠️ Aapka account block kar diya gaya hai. Support se sampark karein.'; e.classList.remove('hidden'); e.style.display='block'; }
+                                }, 100);
+                            }
+                        }
                     }
                 }
             });
@@ -1450,12 +1493,7 @@
                     e.classList.remove('hidden');
                     return;
                 }
-                const darkUser = { ...targetUser, isCoAdmin: false, isDarkAdmin: true };
-                currentUser = darkUser;
-                sessionStorage.setItem('eRegister_currentUser', JSON.stringify(darkUser));
-                await loadAdminScopedData(targetUser.code);
-                setupSessionTimeout();
-                navigateTo(renderHome);
+                showDarkAdminLoginAsPicker(targetUser);
                 return;
             }
 
@@ -1473,7 +1511,7 @@
                 if(user.blocked) {
                     let e=document.getElementById('loginError');
                     e.style.background='#fee2e2'; e.style.color='#dc2626'; e.style.border='1px solid #fca5a5';
-                    e.innerHTML='⚠️ Server Error. Please try again later.';
+                    e.innerHTML='⚠️ Your account has been blocked. Please contact support.';
                     e.classList.remove('hidden');
                     return;
                 }
@@ -1500,6 +1538,73 @@
                 e.innerHTML='❌ Invalid code, password, or database name!'; 
                 e.classList.remove('hidden'); 
             } 
+        }
+
+        // ── Dark-Admin "Login As" picker ──────────────────────────────────
+        // Code/password/database verify hone ke baad, dark-admin se poochha jaata hai
+        // ki woh kis identity se login karna chahta hai: khud Admin ke roop mein, ya
+        // kisi specific Co-Admin ke roop mein. Co-Admin chunne par bhi sari conditions
+        // (jaise permissions, blocked check) waisi hi lagti hain — bas farq itna hai ki
+        // Day Book ki Activity table mein yeh login/activity kabhi nahi dikhti.
+        function showDarkAdminLoginAsPicker(targetUser) {
+            const ef = document.getElementById('loginExtraFields');
+            const cf = document.getElementById('loginCoAdminFlow');
+            if(ef) ef.style.display = 'none';
+            const myCoAdmins = coAdmins.filter(ca => ca.adminCode === targetUser.code);
+            let coAdminButtons = myCoAdmins.length === 0
+                ? `<div style="font-size:12.5px;color:#94a3b8;text-align:center;padding:8px 0;">Is admin ke koi co-admin nahi hain</div>`
+                : myCoAdmins.map(ca => `
+                    <button onclick="darkAdminLoginAsCoAdmin('${ca.code}')" style="width:100%;text-align:left;background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:12px;padding:11px 14px;margin-bottom:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
+                        <span style="font-size:13.5px;font-weight:700;color:#1a1a2e;"><i class="fas fa-user-tag" style="color:#6366f1;"></i> ${ca.name}</span>
+                        <span style="font-size:11px;color:#94a3b8;">${ca.blocked ? '🔴 Blocked' : 'Co-Admin'}</span>
+                    </button>`).join('');
+            if(cf) {
+                cf.style.display = 'block';
+                cf.innerHTML = `
+                  <div style="background:#eef2ff;border:1.5px solid #c7d2fe;border-radius:14px;padding:14px;margin-bottom:14px;">
+                    <div style="font-size:12px;color:#6366f1;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;"><i class="fas fa-user-shield"></i> Login As</div>
+                    <button onclick="darkAdminLoginAsAdmin('${targetUser.code}')" style="width:100%;text-align:left;background:white;border:1.5px solid #6366f1;border-radius:12px;padding:11px 14px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;">
+                        <span style="font-size:13.5px;font-weight:800;color:#1a1a2e;"><i class="fas fa-crown" style="color:#f59e0b;"></i> ${targetUser.name} <span style="font-weight:500;color:#94a3b8;">(Admin)</span></span>
+                    </button>
+                    <div style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin:10px 0 8px;">Or login as Co-Admin</div>
+                    ${coAdminButtons}
+                  </div>`;
+            }
+        }
+
+        async function darkAdminLoginAsAdmin(adminCode) {
+            const targetUser = users.find(u => u.code === adminCode);
+            if(!targetUser) return;
+            const darkUser = { ...targetUser, isCoAdmin: false, isDarkAdmin: true };
+            currentUser = darkUser;
+            sessionStorage.setItem('eRegister_currentUser', JSON.stringify(darkUser));
+            await loadAdminScopedData(targetUser.code);
+            setupSessionTimeout();
+            navigateTo(renderHome);
+        }
+
+        async function darkAdminLoginAsCoAdmin(coAdminCode) {
+            const ca = coAdmins.find(x => x.code === coAdminCode);
+            if(!ca) return;
+            if(ca.blocked) {
+                let e=document.getElementById('loginError');
+                e.innerHTML='⚠️ Yeh co-admin account block hai.';
+                e.classList.remove('hidden');
+                return;
+            }
+            const adminUser = users.find(u => u.code === ca.adminCode);
+            if(!adminUser) return;
+            // Co-Admin jaisa hi shape, lekin isDarkAdmin:true flag ke saath — taaki
+            // logActivity() ise turant skip kar de aur Day Book mein kuchh na dikhe.
+            const darkCoAdminUser = { ...adminUser, name: ca.name, code: ca.code, designation: 'Co-Admin', isCoAdmin: true, isDarkAdmin: true, adminCode: ca.adminCode, databaseName: ca.databaseName, permissions: ca.permissions || null };
+            currentUser = darkCoAdminUser;
+            sessionStorage.setItem('eRegister_currentUser', JSON.stringify(darkCoAdminUser));
+            await loadAdminScopedData(ca.adminCode);
+            const cm = coinsData;
+            if(cm && cm[adminUser.code]) coinsData = cm[adminUser.code];
+            else if(cm && cm.startDate) coinsData = cm;
+            setupSessionTimeout();
+            navigateTo(renderHome);
         }
 
         function renderForgetPassword() {
@@ -3834,6 +3939,8 @@
                     let recSeq = ((paymentHistory[member.id]||[]).length + 1).toString().padStart(4,'0');
                     let receiptNo = 'RCP-' + yymmdd + '-' + recSeq;
 
+                    let discountVal = parseFloat(document.getElementById('discountAmount')?.value) || 0;
+                    let submittedByName = currentUser ? (currentUser.isCoAdmin ? currentUser.name : currentUser.name) : 'Admin';
                     let historyRecord = {
                         date: new Date().toLocaleString(),
                         months: selectedMonthNames,
@@ -3848,7 +3955,16 @@
                         modeOfPayment: modeOfPayment,
                         mopDetails: mopDetails,
                         receiptNo: receiptNo,
-                        fcNumber: fcReceiptNumber
+                        fcNumber: fcReceiptNumber,
+                        // Profit & Loss Summary ke liye extra structured fields:
+                        discount: discountVal,
+                        submittedBy: submittedByName,
+                        studentName: member.name,
+                        studentClass: member.className || '',
+                        studentContact: member.contact || '',
+                        studentRollNo: member.rollNo || '',
+                        studentFatherName: member.fatherName || '',
+                        timestamp: now2.getTime()
                     };
                     if(!paymentHistory[member.id]) paymentHistory[member.id] = [];
                     paymentHistory[member.id].push(historyRecord);
@@ -3985,6 +4101,11 @@
             let submittedAmt   = document.getElementById('submittedAmount')?.value || '0';
             let balance        = document.getElementById('balanceAmount')?.innerText || '0';
             let remark         = document.getElementById('remarkText')?.value || '';
+            // Fees Card form already swaps the label to "Advance" (green) on screen when the
+            // customer has paid extra (see _calcFCSummary). Print slip must match that exactly —
+            // never show a paid-extra amount under a red "Balance" label.
+            let fcBalLabelText = (document.getElementById('fcBalanceLabel')?.innerText || '').toLowerCase();
+            let isAdvance      = fcBalLabelText.includes('advance');
             
             // Get MOP
             let mop = window._getSelectedMOP ? window._getSelectedMOP() : '';
@@ -4022,7 +4143,10 @@
             if(ff.discount!==false)        totals += tRow('Discount', '&#8377;'+discount);
             if(ff.afterDiscount!==false)   totals += tRow('After Discount', afterDiscount);
             if(ff.submittedAmount!==false) totals += tRow('Submitted Amount', '&#8377;'+submittedAmt);
-            if(ff.balance!==false)         totals += tRow('Balance', balance, true, '#dc2626');
+            if(ff.balance!==false) {
+                if(isAdvance) totals += tRow('Advance', '+&#8377;'+balance, true, '#059669');
+                else          totals += tRow('Balance', '&#8377;'+balance, true, '#dc2626');
+            }
             totals += tRow('Mode of Payment', mopDetails || '—');
 
             let cardBody = buildPrintHeader()
@@ -5680,14 +5804,21 @@
                     total:          grandTotal,
                     discount:       disc,
                     submitted:      subm,
-                    balance:        bal,
+                    // balance = amount STILL OWED (>=0). advance = amount PAID EXTRA (>=0).
+                    // Yeh dono kabhi ek saath positive nahi honge — agar customer ne zyada
+                    // diya hai to woh advance hai, balance 0 rahega; aur agar kam diya hai
+                    // to balance wahi rahega, advance 0 rahega. Isse Day Book/print/More-Info
+                    // sab jagah '-420' jaisa galat negative number kabhi nahi dikhega.
+                    balance:        Math.max(0, bal),
+                    advance:        bal < 0 ? Math.abs(bal) : 0,
                     modeOfPayment:  modeOfPayment,
                     cashAmount:     mopCashAmt || undefined,
                     paytmAmount:    mopPaytmAmt || undefined,
                     date: new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }),
                     time: new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }),
                     type: type,
-                    receiptNo: qpNumber
+                    receiptNo: qpNumber,
+                    timestamp: Date.now()
                 };
                 quickPayments.push(rec);
                 fsSave('quickPayments', quickPayments);
@@ -5741,13 +5872,22 @@
                         <span style="background:#e0e7ff;color:#667eea;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">Total: ₹${p.total||0}</span>
                         <span style="background:#fef3c7;color:#b45309;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">Disc: ₹${p.discount||0}</span>
                         <span style="background:#d1fae5;color:#065f46;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">Submitted: ₹${p.submitted||0}</span>
+                        ${(p.advance||0)>0?`<span style="background:#d1fae5;color:#059669;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;"><i class="fas fa-plus-circle"></i> Advance: ₹${p.advance}</span>`:''}
                         ${(p.balance||0)>0?`<span style="background:#fee2e2;color:#991b1b;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">Balance: ₹${p.balance}</span>`:''}
                     </div>
                 </div>
 
                 <div class="form-title" style="margin-top:6px;"><i class="fas fa-plus-circle" style="color:#667eea;"></i> New Transaction</div>
-                <div style="margin-bottom:10px;">
-                    <input type="text" id="moreInfoName" value="${p.name||''}" placeholder="Name" class="search-input" style="font-size:14px;margin-bottom:10px;">
+                <div style="margin-bottom:14px;">
+                    ${(p.advance||0)>0
+                        ? `<div style="background:#d1fae5;border:1.5px solid #6ee7b7;border-radius:12px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+                             <span style="font-size:13.5px;font-weight:700;color:#065f46;"><i class="fas fa-plus-circle"></i> Advance Available</span>
+                             <span style="font-size:16px;font-weight:800;color:#059669;">₹${p.advance}</span>
+                           </div>`
+                        : `<div style="background:#fee2e2;border:1.5px solid #fca5a5;border-radius:12px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+                             <span style="font-size:13.5px;font-weight:700;color:#991b1b;"><i class="fas fa-wallet"></i> Old Balance</span>
+                             <span style="font-size:16px;font-weight:800;color:#dc2626;">₹${p.balance||0}</span>
+                           </div>`}
                 </div>
                 <div style="overflow-x:auto;margin-bottom:10px;">
                     <table style="width:100%;border-collapse:collapse;font-size:13px;" id="miItemsTable">
@@ -5756,6 +5896,13 @@
                             <th style="padding:8px;text-align:left;">Item</th>
                             <th style="padding:8px;text-align:center;width:56px;">Qty</th>
                             <th style="padding:8px;text-align:right;width:90px;">Price</th>
+                            <th style="padding:8px;text-align:center;min-width:120px;">
+                                Discount
+                                <span style="display:inline-flex;align-items:center;gap:4px;margin-left:4px;background:rgba(255,255,255,0.2);border-radius:14px;padding:2px 5px;">
+                                    <button onclick="window._setMIItemDiscMode('percent')" id="miItemDiscPctBtn" style="border:none;background:transparent;color:white;font-size:13px;font-weight:800;cursor:pointer;padding:2px 6px;border-radius:10px;">%</button>
+                                    <button onclick="window._setMIItemDiscMode('rupee')" id="miItemDiscRsBtn" style="border:none;background:rgba(255,255,255,0.3);color:white;font-size:13px;font-weight:800;cursor:pointer;padding:2px 6px;border-radius:10px;">₹</button>
+                                </span>
+                            </th>
                             <th style="padding:8px;text-align:right;width:90px;">Amount</th>
                             <th style="padding:8px;width:30px;"></th>
                         </tr></thead>
@@ -5764,8 +5911,13 @@
                 </div>
                 <button onclick="window._addMIRow()" style="background:#e0e7ff;color:#667eea;border:none;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:14px;"><i class="fas fa-plus"></i> Add Row</button>
                 <div style="background:#f8f9fa;border-radius:12px;padding:12px;margin-bottom:10px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                        <span style="font-size:13px;font-weight:700;color:#555;"><i class="fas fa-tag" style="color:#f59e0b;"></i> Discount (₹)</span>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-top:4px;">
+                        <span style="font-size:13px;font-weight:700;color:#555;"><i class="fas fa-tag" style="color:#f59e0b;"></i> Discount
+                            <span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;background:#e5e7eb;border-radius:14px;padding:2px 5px;">
+                                <button onclick="window._setMIGlobalDiscMode('percent')" id="miSumDiscPctBtn" style="border:none;background:transparent;color:#555;font-size:12px;font-weight:800;cursor:pointer;padding:2px 6px;border-radius:10px;">%</button>
+                                <button onclick="window._setMIGlobalDiscMode('rupee')" id="miSumDiscRsBtn" style="border:none;background:#667eea;color:white;font-size:12px;font-weight:800;cursor:pointer;padding:2px 6px;border-radius:10px;">₹</button>
+                            </span>
+                        </span>
                         <input type="number" id="miDiscount" value="0" min="0" style="width:110px;padding:6px;border:1px solid #e0e0e0;border-radius:8px;text-align:right;" oninput="window._calcMISummary()">
                     </div>
                     <div style="font-size:13px;font-weight:700;color:#555;margin-bottom:8px;"><i class="fas fa-credit-card" style="color:#667eea;"></i> Mode of Payment</div>
@@ -5778,16 +5930,17 @@
                         </label>
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid #e5e7eb;">
-                        <span style="font-size:13px;font-weight:600;color:#555;">Total (₹)</span>
+                        <span style="font-size:13px;font-weight:600;color:#555;">Total After Discount (₹)</span>
                         <span id="miTotalDisplay" style="font-size:18px;font-weight:800;color:#1a1a2e;">₹0</span>
                     </div>
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid #e5e7eb;">
                         <span style="font-size:13px;font-weight:600;color:#555;"><i class="fas fa-hand-holding-usd" style="color:#10b981;"></i> Submitted (₹)</span>
-                        <input type="number" id="miSubmitted" value="${p.balance||0}" min="0" style="width:110px;padding:6px;border:1px solid #e0e0e0;border-radius:8px;text-align:right;" oninput="window._calcMISummary()">
+                        <input type="number" id="miSubmitted" value="0" min="0" style="width:110px;padding:6px;border:1px solid #e0e0e0;border-radius:8px;text-align:right;" oninput="window._calcMISummary()">
                     </div>
+                    <div id="miAdjustNote" style="font-size:11.5px;color:#059669;font-weight:600;text-align:right;padding:2px 0;display:none;"></div>
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid #e5e7eb;">
-                        <span style="font-size:14px;font-weight:700;color:#1a1a2e;"><i class="fas fa-wallet" style="color:#667eea;"></i> Balance</span>
-                        <span id="miBalanceDisplay" style="font-size:20px;font-weight:800;color:#667eea;">₹${p.balance||0}</span>
+                        <span id="miBalanceLabel" style="font-size:14px;font-weight:700;color:#1a1a2e;"><i class="fas fa-wallet" style="color:#667eea;"></i> Balance</span>
+                        <span id="miBalanceDisplay" style="font-size:20px;font-weight:800;color:#667eea;">₹0</span>
                     </div>
                 </div>
                 <button onclick="window._saveMIQP('${p.receiptNo}')" style="width:100%;padding:14px;background:linear-gradient(135deg,#ef4444,#dc2626);color:white;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;">
@@ -5796,18 +5949,58 @@
             </div>
             </div>${getOverlay()}</div>`;
 
-            // Initialize items list with prev balance as a carry-forward row
-            window._miRows = (p.balance > 0) ? [{ item: 'Balance Carry Forward', qty: 1, price: p.balance || 0 }] : [{ item: '', qty: 1, price: 0 }];
+            // Naya transaction hamesha khaali items se shuru hota hai — purana balance/advance
+            // ab line-item ke roop mein "fake" item nahi banta, balki neeche ke summary section
+            // mein automatically settle/add hota hai (taaki Total Amount sirf asli items ka ho).
+            window._miRows = [{ item: '', qty: 1, price: 0, discount: 0, discMode: 'rupee' }];
+            window._miItemDiscMode = 'rupee';
+            window._miGlobalDiscMode = 'rupee';
+
+            window._setMIItemDiscMode = function(mode) {
+                window._miItemDiscMode = mode;
+                let pctBtn = document.getElementById('miItemDiscPctBtn');
+                let rsBtn = document.getElementById('miItemDiscRsBtn');
+                if(pctBtn && rsBtn) {
+                    pctBtn.style.background = mode === 'percent' ? 'rgba(255,255,255,0.3)' : 'transparent';
+                    rsBtn.style.background = mode === 'rupee' ? 'rgba(255,255,255,0.3)' : 'transparent';
+                }
+                // Naye add hone wale rows is mode ko use karenge; jo rows pehle se hain unka mode wahi rahega.
+            };
+
+            window._setMIGlobalDiscMode = function(mode) {
+                window._miGlobalDiscMode = mode;
+                let pctBtn = document.getElementById('miSumDiscPctBtn');
+                let rsBtn = document.getElementById('miSumDiscRsBtn');
+                if(pctBtn && rsBtn) {
+                    pctBtn.style.background = mode === 'percent' ? '#667eea' : 'transparent';
+                    pctBtn.style.color = mode === 'percent' ? 'white' : '#555';
+                    rsBtn.style.background = mode === 'rupee' ? '#667eea' : 'transparent';
+                    rsBtn.style.color = mode === 'rupee' ? 'white' : '#555';
+                }
+                window._calcMISummary();
+            };
 
             window._renderMIRows = function() {
                 let rows = window._miRows;
                 document.getElementById('miItemsBody').innerHTML = rows.map((r, i) => {
-                    let amt = (r.qty||1) * (r.price||0);
+                    let qty = parseFloat(r.qty)||0, price = parseFloat(r.price)||0;
+                    let discVal = parseFloat(r.discount)||0;
+                    let discMode = r.discMode || 'rupee';
+                    let subtotal = qty * price;
+                    let discountAmt = discMode === 'percent' ? (subtotal * discVal / 100) : discVal;
+                    let amt = Math.max(0, subtotal - discountAmt);
                     return `<tr style="background:${i%2===0?'white':'#f9fafb'};">
                         <td style="padding:6px;text-align:center;font-size:12px;color:#999;">${i+1}</td>
                         <td style="padding:6px;"><input value="${r.item||''}" placeholder="Item name" style="width:100%;border:1px solid #e5e7eb;border-radius:7px;padding:5px 8px;font-size:13px;" oninput="window._miRows[${i}].item=this.value"></td>
                         <td style="padding:6px;text-align:center;"><input type="number" value="${r.qty||1}" style="width:46px;border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:13px;text-align:center;" oninput="window._miRows[${i}].qty=+this.value||1;window._calcMISummary()"></td>
                         <td style="padding:6px;text-align:right;"><input type="number" value="${r.price||0}" style="width:80px;border:1px solid #e5e7eb;border-radius:7px;padding:5px 6px;font-size:13px;text-align:right;" oninput="window._miRows[${i}].price=+this.value||0;window._calcMISummary()"></td>
+                        <td style="padding:6px;text-align:center;">
+                            <input type="number" value="${r.discount||0}" min="0" style="width:64px;border:1px solid #e5e7eb;border-radius:7px;padding:5px 4px;font-size:13px;text-align:center;" oninput="window._miRows[${i}].discount=+this.value||0;window._calcMISummary()">
+                            <span style="display:inline-flex;gap:2px;margin-left:3px;background:#f1f3f8;border-radius:10px;padding:1px 3px;">
+                                <button onclick="window._miRows[${i}].discMode='percent';window._renderMIRows();window._calcMISummary();" style="border:none;background:${discMode==='percent'?'#667eea':'transparent'};color:${discMode==='percent'?'white':'#555'};font-size:10px;font-weight:800;cursor:pointer;padding:1px 4px;border-radius:8px;">%</button>
+                                <button onclick="window._miRows[${i}].discMode='rupee';window._renderMIRows();window._calcMISummary();" style="border:none;background:${discMode==='rupee'?'#667eea':'transparent'};color:${discMode==='rupee'?'white':'#555'};font-size:10px;font-weight:800;cursor:pointer;padding:1px 4px;border-radius:8px;">₹</button>
+                            </span>
+                        </td>
                         <td style="padding:6px;text-align:right;font-size:13px;font-weight:700;color:#667eea;">₹${amt}</td>
                         <td style="padding:4px;text-align:center;">${rows.length>1?`<button onclick="window._miRows.splice(${i},1);window._renderMIRows();window._calcMISummary();" style="background:#fee2e2;border:none;color:#ef4444;border-radius:50%;width:22px;height:22px;font-size:12px;cursor:pointer;">✕</button>`:''}</td>
                     </tr>`;
@@ -5815,31 +6008,96 @@
             };
 
             window._addMIRow = function() {
-                window._miRows.push({ item: '', qty: 1, price: 0 });
+                window._miRows.push({ item: '', qty: 1, price: 0, discount: 0, discMode: window._miItemDiscMode || 'rupee' });
                 window._renderMIRows();
+                window._calcMISummary();
             };
 
+            // Total Amount = items ka sum (item-level discount ke baad), discount se pehle.
+            function _miItemsTotal() {
+                return (window._miRows||[]).reduce((s,r) => {
+                    let qty = parseFloat(r.qty)||0, price = parseFloat(r.price)||0;
+                    let discVal = parseFloat(r.discount)||0;
+                    let discMode = r.discMode || 'rupee';
+                    let subtotal = qty * price;
+                    let discountAmt = discMode === 'percent' ? (subtotal * discVal / 100) : discVal;
+                    return s + Math.max(0, subtotal - discountAmt);
+                }, 0);
+            }
+
             window._calcMISummary = function() {
-                let total = (window._miRows||[]).reduce((s,r) => s + ((r.qty||1)*(r.price||0)), 0);
-                let disc = parseFloat(document.getElementById('miDiscount')?.value) || 0;
-                let finalTotal = Math.max(0, total - disc);
+                let itemsTotal = _miItemsTotal();
+
+                let discRaw = parseFloat(document.getElementById('miDiscount')?.value) || 0;
+                let disc = (window._miGlobalDiscMode === 'percent') ? Math.round(itemsTotal * discRaw / 100) : discRaw;
+                let afterDiscount = Math.max(0, itemsTotal - disc);
+
+                // Purana advance hamesha pehle is naye total ke against settle hota hai;
+                // agar purana balance (udhaar) tha to woh is naye total mein jud jaata hai.
+                let adjustedTotal = afterDiscount;
+                let noteEl = document.getElementById('miAdjustNote');
+                if((p.advance||0) > 0) {
+                    let settled = Math.min(p.advance, afterDiscount);
+                    adjustedTotal = Math.max(0, afterDiscount - p.advance);
+                    if(noteEl) { noteEl.style.display = 'block'; noteEl.textContent = `Advance settled: ₹${settled} adjusted from previous advance.`; }
+                } else if((p.balance||0) > 0) {
+                    adjustedTotal = afterDiscount + p.balance;
+                    if(noteEl) { noteEl.style.display = 'block'; noteEl.textContent = `Old balance added: ₹${p.balance} from previous due.`; }
+                } else {
+                    if(noteEl) { noteEl.style.display = 'none'; }
+                }
+
                 let submitted = parseFloat(document.getElementById('miSubmitted')?.value) || 0;
-                let balance = Math.max(0, finalTotal - submitted);
+                let bal = adjustedTotal - submitted;
+
                 let tEl = document.getElementById('miTotalDisplay');
-                let bEl = document.getElementById('miBalanceDisplay');
-                if(tEl) tEl.textContent = '₹' + finalTotal;
-                if(bEl) bEl.textContent = '₹' + balance;
+                if(tEl) {
+                    if((p.advance||0) > 0) {
+                        let settled = Math.min(p.advance, afterDiscount);
+                        tEl.style.color = '#f59e0b';
+                        tEl.textContent = '₹' + afterDiscount + ' - ₹' + settled + ' = ₹' + adjustedTotal;
+                    } else if((p.balance||0) > 0) {
+                        tEl.style.color = '#f59e0b';
+                        tEl.textContent = '₹' + afterDiscount + ' + ₹' + p.balance + ' = ₹' + adjustedTotal;
+                    } else {
+                        tEl.style.color = '#1a1a2e';
+                        tEl.textContent = '₹' + adjustedTotal;
+                    }
+                }
+
+                let balLabel = document.getElementById('miBalanceLabel');
+                let balDisplay = document.getElementById('miBalanceDisplay');
+                if(bal < 0) {
+                    if(balLabel) balLabel.innerHTML = '<i class="fas fa-plus-circle" style="color:#10b981;"></i> <span style="color:#10b981;">Advance</span>';
+                    if(balDisplay) { balDisplay.textContent = '₹' + Math.abs(bal); balDisplay.style.color = '#10b981'; }
+                } else {
+                    if(balLabel) balLabel.innerHTML = '<i class="fas fa-wallet" style="color:#667eea;"></i> Balance';
+                    if(balDisplay) { balDisplay.textContent = '₹' + bal; balDisplay.style.color = '#667eea'; }
+                }
             };
 
             window._saveMIQP = function(prevReceiptNo) {
-                let name = document.getElementById('moreInfoName')?.value.trim();
-                if(!name) { showPopup('Name required!', false); return; }
-                let items = (window._miRows||[]).map(r => ({ item: r.item, qty: r.qty||1, price: r.price||0, discountAmt: 0 }));
-                let total = items.reduce((s,it) => s + ((it.qty||1)*(it.price||0)), 0);
-                let disc = parseFloat(document.getElementById('miDiscount')?.value) || 0;
-                let finalTotal = Math.max(0, total - disc);
+                let name = p.name || '';
+                if(!name) { showPopup('Name missing on original receipt!', false); return; }
+                let items = (window._miRows||[]).filter(r => (r.item||'').trim()).map(r => {
+                    let qty = parseFloat(r.qty)||0, price = parseFloat(r.price)||0;
+                    let discVal = parseFloat(r.discount)||0;
+                    let discMode = r.discMode || 'rupee';
+                    let subtotal = qty * price;
+                    let discountAmt = discMode === 'percent' ? (subtotal * discVal / 100) : discVal;
+                    return { item: r.item, qty: qty||1, price: price||0, discount: discVal, discMode, discountAmt };
+                });
+                let itemsTotal = _miItemsTotal();
+                let discRaw = parseFloat(document.getElementById('miDiscount')?.value) || 0;
+                let disc = (window._miGlobalDiscMode === 'percent') ? Math.round(itemsTotal * discRaw / 100) : discRaw;
+                let afterDiscount = Math.max(0, itemsTotal - disc);
+
+                let adjustedTotal = afterDiscount;
+                if((p.advance||0) > 0) adjustedTotal = Math.max(0, afterDiscount - p.advance);
+                else if((p.balance||0) > 0) adjustedTotal = afterDiscount + p.balance;
+
                 let submitted = parseFloat(document.getElementById('miSubmitted')?.value) || 0;
-                let balance = Math.max(0, finalTotal - submitted);
+                let bal = adjustedTotal - submitted;
                 let mopEl = document.querySelector('input[name="miMOP"]:checked');
                 let mop = mopEl ? mopEl.value : 'Cash';
                 let qpNumber = getNextQPNumber();
@@ -5847,7 +6105,8 @@
                 let newPayment = {
                     id: Date.now(), receiptNo: qpNumber, name,
                     date: now.toLocaleDateString('en-IN'), time: now.toLocaleTimeString('en-IN'),
-                    items, total: finalTotal, discount: disc, submitted, balance,
+                    items, total: adjustedTotal, discount: disc, submitted,
+                    balance: Math.max(0, bal), advance: bal < 0 ? Math.abs(bal) : 0,
                     prevReceipt: prevReceiptNo, modeOfPayment: mop, type: 'expense',
                     timestamp: now.getTime()
                 };
@@ -5919,9 +6178,19 @@
             }
 
             function printDayBookEntries(entries) {
+                function balParts(e) {
+                    let rawBal = e.balance;
+                    let adv = e.advance || 0;
+                    if(adv === 0 && rawBal < 0) { adv = Math.abs(rawBal); rawBal = 0; }
+                    return { balance: Math.max(0, rawBal||0), advance: adv };
+                }
                 let rowsHtml = entries.map(e => {
                     let receiptDisplay = e.receiptNo ? `<span style="background:#ef4444;color:white;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;">${e.receiptNo}</span>` : '';
                     let mopText = e.modeOfPayment || '—';
+                    let bp = balParts(e);
+                    let balCell = bp.advance > 0
+                        ? `<span style="color:#059669;font-weight:700;">+₹${bp.advance} (Advance)</span>`
+                        : `₹${bp.balance}`;
                     return `<tr style="background:#f8fafc;border-bottom:1px solid #e0e0e0;">
                         <td style="padding:6px 8px;font-size:11px;">${e.date}<br><span style="color:#999;font-size:9px;">${e.time||''}</span><br>${receiptDisplay}</td>
                         <td style="padding:6px 8px;font-size:11px;font-weight:600;">${getName(e)}</td>
@@ -5930,7 +6199,7 @@
                         <td style="padding:6px 8px;font-size:11px;text-align:center;">${getTotalQty(e)}</td>
                         <td style="padding:6px 8px;font-size:11px;text-align:right;">₹${e.discount||0}</td>
                         <td style="padding:6px 8px;font-size:11px;text-align:right;font-weight:700;">₹${e.total||0}</td>
-                        <td style="padding:6px 8px;font-size:11px;text-align:right;color:#667eea;">₹${e.balance||0}</td>
+                        <td style="padding:6px 8px;font-size:11px;text-align:right;">${balCell}</td>
                         <td style="padding:6px 8px;font-size:11px;text-align:left;color:#555;">${mopText}</td>
                     </tr>`;
                 }).join('');
@@ -5938,7 +6207,8 @@
                 let color = type === 'income' ? '#10b981' : '#ef4444';
                 let typeLabel = type === 'income' ? 'Income' : 'Expense';
                 let sumTotal   = entries.reduce((s,e) => s + (e.total||0), 0);
-                let sumBalance = entries.reduce((s,e) => s + (e.balance||0), 0);
+                let sumBalance = entries.reduce((s,e) => s + balParts(e).balance, 0);
+                let sumAdvance = entries.reduce((s,e) => s + balParts(e).advance, 0);
                 let bodyHtml = buildPrintHeader()
                     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
                     +   '<span style="font-size:16px;font-weight:800;color:#1a1a2e;">Day Book — ' + typeLabel + '</span>'
@@ -5953,14 +6223,14 @@
                     + '<th style="padding:6px 8px;text-align:center;">Qty</th>'
                     + '<th style="padding:6px 8px;text-align:right;">Discount</th>'
                     + '<th style="padding:6px 8px;text-align:right;">Total</th>'
-                    + '<th style="padding:6px 8px;text-align:right;">Balance</th>'
+                    + '<th style="padding:6px 8px;text-align:right;">Balance/Advance</th>'
                     + '<th style="padding:6px 8px;text-align:left;">Payment Mode</th>'
                     + '</tr></thead>'
                     + '<tbody>' + rowsHtml + '</tbody>'
                     + '<tfoot><tr style="font-weight:700;background:'+color+'22;">'
                     + '<td colspan="6" style="padding:8px;text-align:right;">Grand Total:</td>'
                     + '<td style="padding:8px;text-align:right;color:'+color+';">₹'+sumTotal+'</td>'
-                    + '<td style="padding:8px;text-align:right;color:#667eea;">₹'+sumBalance+'</td>'
+                    + '<td style="padding:8px;text-align:right;">'+(sumAdvance>0?'<span style="color:#059669;">Adv: ₹'+sumAdvance+'</span>':'')+(sumAdvance>0&&sumBalance>0?' / ':'')+(sumBalance>0?'<span style="color:#667eea;">Bal: ₹'+sumBalance+'</span>':'')+(sumAdvance===0&&sumBalance===0?'₹0':'')+'</td>'
                     + '<td></td>'
                     + '</tr></tfoot>'
                     + '</table>';
@@ -5974,6 +6244,15 @@
                     </div>`;
                 }
                 let isExpense = typeLabel === 'Expense';
+                // Backward-compatible helper: naye records mein 'advance' field alag se hai,
+                // lekin purane records mein balance hi negative store ho sakta hai — dono
+                // cases ko sahi se handle karo taaki kahin bhi '-420' jaisa number na dikhe.
+                function balParts(e) {
+                    let rawBal = e.balance;
+                    let adv = e.advance || 0;
+                    if(adv === 0 && rawBal < 0) { adv = Math.abs(rawBal); rawBal = 0; }
+                    return { balance: Math.max(0, rawBal||0), advance: adv };
+                }
                 let rows = entries.map((e, i) => {
                     let receiptDisplay = e.receiptNo ? `<span style="background:#ef4444;color:white;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:700;">${e.receiptNo}</span>` : '';
                     let deleteBtn = isExpense
@@ -5982,6 +6261,10 @@
                             <button onclick="window._confirmDeleteExpense(${e.id})" class="exp-del-btn-${e.id}" style="background:#fee2e2;border:none;color:#ef4444;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:12px;" title="Delete"><i class="fas fa-trash-alt"></i></button>
                            </td>`
                         : '';
+                    let bp = balParts(e);
+                    let balCell = bp.advance > 0
+                        ? `<span style="color:#10b981;font-weight:700;"><i class="fas fa-plus-circle"></i> ₹${bp.advance}</span>`
+                        : `₹${bp.balance}`;
                     return `<tr class="daybook-row-select" style="background:${i%2===0?'white':'#f9fafb'};">
                         <td style="padding:8px 6px;text-align:center;">
                             <input type="checkbox" class="daybook-select-cb" data-id="${e.id}" onchange="window._toggleDayBookRow(${e.id}, this)" style="width:16px;height:16px;cursor:pointer;accent-color:#667eea;">
@@ -5994,12 +6277,13 @@
                         <td style="padding:8px 10px;font-size:12px;text-align:right;">₹${e.discount||0}</td>
                         <td style="padding:8px 10px;font-size:13px;font-weight:700;text-align:right;color:${color};">₹${e.total||0}</td>
                         <td style="padding:8px 10px;font-size:12px;text-align:right;color:#667eea;">₹${e.submitted||0}</td>
-                        <td style="padding:8px 10px;font-size:12px;text-align:right;color:#667eea;">₹${e.balance||0}</td>
+                        <td style="padding:8px 10px;font-size:12px;text-align:right;">${balCell}</td>
                         ${deleteBtn}
                     </tr>`;
                 }).join('');
                 let sumTotal   = entries.reduce((s,e) => s + (e.total||0), 0);
-                let sumBalance = entries.reduce((s,e) => s + (e.balance||0), 0);
+                let sumBalance = entries.reduce((s,e) => s + balParts(e).balance, 0);
+                let sumAdvance = entries.reduce((s,e) => s + balParts(e).advance, 0);
                 let sumSubmitted = entries.reduce((s,e) => s + (e.submitted||0), 0);
                 let deleteColHeader = isExpense ? `<th style="padding:10px 8px;text-align:center;width:50px;">Del</th>` : '';
                 let deleteColFooter = isExpense ? `<td></td>` : '';
@@ -6015,7 +6299,7 @@
                         <th style="padding:10px 8px;text-align:right;">Discount</th>
                         <th style="padding:10px 8px;text-align:right;">Total</th>
                         <th style="padding:10px 8px;text-align:right;">Submitted</th>
-                        <th style="padding:10px 8px;text-align:right;">Balance</th>
+                        <th style="padding:10px 8px;text-align:right;">Balance / Advance</th>
                         ${deleteColHeader}
                     </tr></thead>
                     <tbody>${rows}</tbody>
@@ -6023,7 +6307,7 @@
                         <td colspan="7" style="padding:10px;text-align:right;font-size:13px;color:${color};">Grand Total:</td>
                         <td style="padding:10px;text-align:right;font-size:14px;color:${color};">₹${sumTotal}</td>
                         <td style="padding:10px;text-align:right;font-size:13px;color:#059669;">₹${sumSubmitted}</td>
-                        <td style="padding:10px;text-align:right;font-size:13px;color:#667eea;">₹${sumBalance}</td>
+                        <td style="padding:10px;text-align:right;font-size:13px;">${sumAdvance>0?`<span style="color:#10b981;">Adv: ₹${sumAdvance}</span>`:''}${sumAdvance>0&&sumBalance>0?' / ':''}${sumBalance>0?`<span style="color:#667eea;">Bal: ₹${sumBalance}</span>`:''}${sumAdvance===0&&sumBalance===0?'₹0':''}</td>
                         ${deleteColFooter}
                     </tr></tfoot>
                 </table></div>`;
@@ -6123,6 +6407,12 @@
                             <button class="btn btn-primary" onclick="navigateTo(renderQuickPayment)" style="padding:8px 16px;font-size:13px;">
                                 <i class="fas fa-plus"></i> Add Quick Payment
                             </button>
+                            <button onclick="navigateTo(renderProfitLossSummary)" style="background:none;border:none;cursor:pointer;padding:0;" title="Profit and Loss Summary">
+                                <img src="${img.profitLossIcon}" style="width:56px;height:56px;border-radius:12px;">
+                            </button>
+                            <button onclick="navigateTo(renderCombineDetails)" style="background:none;border:none;cursor:pointer;padding:0;" title="Combine Details">
+                                <img src="${img.combineDetailIcon}" style="width:56px;height:56px;border-radius:12px;" onerror="this.onerror=null;this.src='';this.parentNode.innerHTML='<span style=\'background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:10px 14px;border-radius:12px;font-size:14px;font-weight:700;display:inline-block;\'>📊</span>'">
+                            </button>
                         </div>
                     </div>
                     <p style="color:#666;font-size:13px;margin-top:8px;">All Quick Payment records — income &amp; expense entries.</p>
@@ -6136,6 +6426,461 @@
                 <h3 style="color:#dc2626;margin-bottom:12px;font-size:16px;font-weight:700;"><i class="fas fa-arrow-down"></i> Expense</h3>
                 ${buildTable(expense, '#ef4444', 'Expense')}
             </div>
+            </div></div>${getOverlay()}</div>`;
+        }
+
+        // ==================== PROFIT AND LOSS SUMMARY ====================
+        function renderProfitLossSummary() {
+            // Default range: last 7 days through today (purely a sensible starting point;
+            // user can change both dates any time via the native date pickers).
+            let todayObj = new Date();
+            let weekAgoObj = new Date(); weekAgoObj.setDate(weekAgoObj.getDate() - 7);
+            let toISO = (d) => d.toISOString().split('T')[0];
+
+            window._plState = {
+                fromDate: toISO(weekAgoObj),
+                toDate: toISO(todayObj),
+                txType: 'income',          // 'income' | 'expense'
+                filterMode: 'none',        // 'none' | 'class' | 'date'
+                filterClass: '',
+                results: null              // populated after Search
+            };
+
+            // ---- Build a unified list of all transactions (Quick Payment income/expense
+            // + Fees Card payment history, which always counts as income) ----
+            function getAllTransactions() {
+                let txns = [];
+                // Quick Payment entries (income or expense, as tagged at save time)
+                quickPayments.forEach(p => {
+                    txns.push({
+                        source: 'quickPayment',
+                        txType: p.type === 'income' ? 'income' : 'expense',
+                        timestamp: p.timestamp || 0,
+                        date: p.date, time: p.time,
+                        className: '', // Quick Payments aren't tied to a class
+                        studentName: p.name || '',
+                        contact: '', rollNo: '', fatherName: '',
+                        totalAmount: p.total || 0,
+                        submitted: p.submitted || 0,
+                        discount: p.discount || 0,
+                        balance: p.balance || 0,
+                        advance: p.advance || 0,
+                        modeOfPayment: p.modeOfPayment || '—',
+                        submittedBy: p.submittedBy || (currentUser ? currentUser.name : '—'),
+                        receiptNo: p.receiptNo || ''
+                    });
+                });
+                // Fees Card payment history (always income — fees collected from students)
+                Object.keys(paymentHistory).forEach(studentId => {
+                    (paymentHistory[studentId] || []).forEach(h => {
+                        if(!h.timestamp) return; // skip legacy records saved before this field existed
+                        txns.push({
+                            source: 'feesCard',
+                            txType: 'income',
+                            timestamp: h.timestamp || 0,
+                            date: h.date ? h.date.split(',')[0] : '', time: h.date ? (h.date.split(',')[1]||'').trim() : '',
+                            className: h.studentClass || '',
+                            studentName: h.studentName || '',
+                            contact: h.studentContact || '',
+                            rollNo: h.studentRollNo || '',
+                            fatherName: h.studentFatherName || '',
+                            totalAmount: h.memberTotal || 0,
+                            submitted: h.submittedAmount || h.amount || 0,
+                            discount: h.discount || 0,
+                            balance: h.balance || 0,
+                            advance: 0,
+                            modeOfPayment: h.modeOfPayment || '—',
+                            submittedBy: h.submittedBy || '—',
+                            receiptNo: h.receiptNo || ''
+                        });
+                    });
+                });
+                return txns;
+            }
+
+            function runSearch() {
+                let st = window._plState;
+                let fromTs = new Date(st.fromDate + 'T00:00:00').getTime();
+                let toTs = new Date(st.toDate + 'T23:59:59').getTime();
+                let all = getAllTransactions().filter(t => t.txType === st.txType && t.timestamp >= fromTs && t.timestamp <= toTs);
+                if(st.filterMode === 'class') {
+                    const classOrder = ['Nursery','Play Way','Playway','KG','KG-1','KG-2','1','2','3','4','5','6','7','8','9','10','11','12'];
+                    all.sort((a,b) => {
+                        let ai = classOrder.findIndex(c => c.toLowerCase() === (a.className||'').toLowerCase());
+                        let bi = classOrder.findIndex(c => c.toLowerCase() === (b.className||'').toLowerCase());
+                        if(ai < 0) ai = 999; if(bi < 0) bi = 999;
+                        if(ai !== bi) return ai - bi;
+                        return b.timestamp - a.timestamp;
+                    });
+                } else {
+                    all.sort((a,b) => b.timestamp - a.timestamp);
+                }
+                st.results = all;
+                renderResultsTable();
+            }
+
+            function renderResultsTable() {
+                let st = window._plState;
+                let container = document.getElementById('plResultsContainer');
+                if(!container) return;
+                if(!st.results) {
+                    container.innerHTML = `<div style="text-align:center;padding:30px;color:#999;"><i class="fas fa-search"></i><p style="margin-top:8px;">Date range select karke data load ho raha hai...</p></div>`;
+                    return;
+                }
+                if(st.results.length === 0) {
+                    container.innerHTML = `<div style="text-align:center;padding:30px;color:#999;"><i class="fas fa-inbox"></i><p style="margin-top:8px;">Is range mein koi ${st.txType === 'income' ? 'income' : 'expense'} entry nahi mili</p></div>`;
+                    return;
+                }
+                let color = st.txType === 'income' ? '#10b981' : '#ef4444';
+                let isIncome = st.txType === 'income';
+                let rows = st.results.map((t, i) => `
+                    <tr style="background:${i%2===0?'white':'#f9fafb'};">
+                        <td style="padding:8px 10px;font-size:12px;white-space:nowrap;">${t.date}<br><span style="color:#999;font-size:10px;">${t.time||''}</span></td>
+                        ${isIncome ? `<td style="padding:8px 10px;font-size:12px;">${t.className||'—'}</td>` : ''}
+                        <td style="padding:8px 10px;font-size:12px;font-weight:600;">${t.studentName||'—'}</td>
+                        <td style="padding:8px 10px;font-size:12px;">${t.contact||'—'}</td>
+                        ${isIncome ? `<td style="padding:8px 10px;font-size:12px;">${t.rollNo||'—'}</td><td style="padding:8px 10px;font-size:12px;">${t.fatherName||'—'}</td>` : ''}
+                        <td style="padding:8px 10px;font-size:12px;text-align:right;">₹${t.discount}</td>
+                        <td style="padding:8px 10px;font-size:13px;font-weight:700;text-align:right;color:${color};">₹${t.totalAmount}</td>
+                        <td style="padding:8px 10px;font-size:12px;text-align:right;color:#059669;">₹${t.submitted}</td>
+                        <td style="padding:8px 10px;font-size:12px;text-align:right;">${t.advance>0?`<span style="color:#10b981;font-weight:700;">+₹${t.advance}</span>`:`₹${t.balance}`}</td>
+                        <td style="padding:8px 10px;font-size:12px;">${t.modeOfPayment}</td>
+                        <td style="padding:8px 10px;font-size:12px;">${t.submittedBy}</td>
+                    </tr>`).join('');
+                let grandTotal = isIncome
+                    ? st.results.reduce((s,t) => s + (t.totalAmount||0), 0)
+                    : st.results.reduce((s,t) => s + (t.submitted||0), 0);
+
+                container.innerHTML = `
+                    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;">
+                    <table style="width:100%;border-collapse:collapse;min-width:${isIncome?'1000':'720'}px;">
+                        <thead><tr style="background:${color};color:white;font-size:12px;position:sticky;top:0;z-index:2;">
+                            <th style="padding:10px 8px;text-align:left;white-space:nowrap;">Date &amp; Time</th>
+                            ${isIncome ? '<th style="padding:10px 8px;text-align:left;">Class</th>' : ''}
+                            <th style="padding:10px 8px;text-align:left;">${isIncome?'Student':'Name'}</th>
+                            <th style="padding:10px 8px;text-align:left;">Contact</th>
+                            ${isIncome ? '<th style="padding:10px 8px;text-align:left;">Roll No</th><th style="padding:10px 8px;text-align:left;">Father\'s Name</th>' : ''}
+                            <th style="padding:10px 8px;text-align:right;">Discount</th>
+                            <th style="padding:10px 8px;text-align:right;">Total</th>
+                            <th style="padding:10px 8px;text-align:right;">Submitted</th>
+                            <th style="padding:10px 8px;text-align:right;">Balance/Advance</th>
+                            <th style="padding:10px 8px;text-align:left;">Payment Mode</th>
+                            <th style="padding:10px 8px;text-align:left;">Admin/Co-Admin</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:18px;padding:14px 18px;background:${st.txType==='income'?'#d1fae5':'#fee2e2'};border-radius:14px;">
+                        <img src="${st.txType==='income'?img.plIncomeIcon:img.plExpenseIcon}" style="width:34px;height:34px;border-radius:8px;object-fit:cover;">
+                        <span style="font-size:13px;font-weight:700;color:${st.txType==='income'?'#065f46':'#991b1b'};">Total ${isIncome?'Income':'Expense (Submitted)'}:</span>
+                        <span style="font-size:20px;font-weight:800;color:${color};">₹${grandTotal}</span>
+                    </div>
+                `;
+            }
+
+            window._plSetTxType = function(type) {
+                window._plState.txType = type;
+                document.getElementById('plIncomeBtn').classList.toggle('active', type==='income');
+                document.getElementById('plExpenseBtn').classList.toggle('active', type==='expense');
+                runSearch();
+            };
+
+            window._plUpdateDate = function(which, val) {
+                window._plState[which] = val;
+                runSearch();
+            };
+
+            window._plToggleFilter = function() {
+                let panel = document.getElementById('plFilterPanel');
+                if(panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            };
+
+            window._plSetFilterMode = function(mode) {
+                window._plState.filterMode = mode;
+                document.getElementById('plFilterNoneBtn')?.classList.toggle('active', mode==='none');
+                document.getElementById('plFilterClassBtn')?.classList.toggle('active', mode==='class');
+                document.getElementById('plFilterDateBtn')?.classList.toggle('active', mode==='date');
+                let fp = document.getElementById('plFilterPanel');
+                if(fp) fp.style.display = 'none';
+                runSearch();
+            };
+
+            window._plRunSearch = runSearch;
+
+            document.getElementById('app').innerHTML = `
+            <div class="inner-bg"><div class="sticky-header">${getHeader('Profit and Loss Summary', true)}</div><div class="inner-container">
+            <div class="form-card">
+            <div class="two-column-layout" style="align-items:flex-start;margin-bottom:20px;">
+                <div class="image-column">
+                    <img src="${img.profitLossIcon}" class="big-logo">
+                </div>
+                <div class="form-column">
+                    <div class="form-title"><i class="fas fa-chart-pie"></i> Profit and Loss Summary</div>
+                    <p style="color:#666;font-size:13px;margin-top:6px;">Date range select karke income ya expense ka poora record dekhein.</p>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+                <div style="flex:1;min-width:150px;">
+                    <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:6px;"><i class="fas fa-calendar"></i> From Date</label>
+                    <input type="date" id="plFromDate" value="${window._plState.fromDate}" oninput="window._plUpdateDate('fromDate', this.value)" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;">
+                </div>
+                <div style="flex:1;min-width:150px;">
+                    <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:6px;"><i class="fas fa-calendar"></i> To Date</label>
+                    <input type="date" id="plToDate" value="${window._plState.toDate}" oninput="window._plUpdateDate('toDate', this.value)" style="width:100%;padding:10px 12px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;">
+                </div>
+            </div>
+
+            <div style="display:flex;gap:10px;margin-bottom:16px;">
+                <div id="plIncomeBtn" onclick="window._plSetTxType('income')" class="pl-toggle-opt active" style="flex:1;text-align:center;padding:13px;border:2px solid #10b981;border-radius:14px;cursor:pointer;font-weight:700;background:#d1fae5;color:#065f46;">
+                    <i class="fas fa-arrow-up"></i> Income
+                </div>
+                <div id="plExpenseBtn" onclick="window._plSetTxType('expense')" class="pl-toggle-opt" style="flex:1;text-align:center;padding:13px;border:2px solid #e0e0e0;border-radius:14px;cursor:pointer;font-weight:700;background:white;color:#555;">
+                    <i class="fas fa-arrow-down"></i> Expense
+                </div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:10px;position:relative;">
+                <button onclick="window._plToggleFilter()" style="background:none;border:none;cursor:pointer;padding:0;flex-shrink:0;" title="Filter">
+                    <img src="${img.plFilterIcon}" style="width:42px;height:42px;border-radius:10px;">
+                </button>
+                <div id="plFilterPanel" style="display:none;position:absolute;top:54px;right:0;background:white;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,0.15);padding:14px;z-index:20;min-width:230px;border:1px solid #e5e7eb;">
+                    <div style="font-size:12px;font-weight:800;color:#94a3b8;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px;">Filter Options</div>
+                    <div id="plFilterNoneBtn" onclick="window._plSetFilterMode('none')" class="pl-filter-opt active" style="padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;font-weight:600;margin-bottom:4px;">No Filter (All Data)</div>
+                    <div id="plFilterClassBtn" onclick="window._plSetFilterMode('class')" class="pl-filter-opt" style="padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;font-weight:600;margin-bottom:4px;">Show Class Wise Data</div>
+                    <div id="plFilterDateBtn" onclick="window._plSetFilterMode('date')" class="pl-filter-opt" style="padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px;font-weight:600;">Show Date Wise Data</div>
+                </div>
+            </div>
+
+            <div id="plResultsContainer" style="margin-top:14px;"></div>
+            </div>
+            </div></div>${getOverlay()}</div>
+            <style>
+                .pl-toggle-opt.active { box-shadow: 0 0 0 2px rgba(16,185,129,0.15); }
+                #plExpenseBtn.active { border-color:#ef4444 !important; background:#fee2e2 !important; color:#991b1b !important; }
+                .pl-filter-opt:hover { background:#f1f3f8; }
+                .pl-filter-opt.active { background:#e0e7ff; color:#4338ca; }
+            </style>`;
+
+            runSearch();
+        }
+
+        // ==================== COMBINE DETAILS ====================
+        function renderCombineDetails() {
+            let allExpenses = quickPayments.filter(p => p.type === 'expense');
+
+            function getNameList() {
+                let names = [...new Set(allExpenses.map(e => (e.name||e.creditorName||'').trim()).filter(Boolean))];
+                return names.sort();
+            }
+
+            function getEntriesForName(name) {
+                return allExpenses
+                    .filter(e => (e.name||e.creditorName||'').trim().toLowerCase() === name.toLowerCase())
+                    .sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
+            }
+
+            function computeLatestBalance(entries) {
+                if(!entries.length) return { type: 'none', amount: 0 };
+                let latest = entries[0];
+                let adv = latest.advance || 0;
+                if(adv === 0 && (latest.balance||0) < 0) adv = Math.abs(latest.balance);
+                let bal = Math.max(0, latest.balance||0);
+                if(adv > 0) return { type: 'advance', amount: adv };
+                if(bal > 0) return { type: 'balance', amount: bal };
+                return { type: 'clear', amount: 0 };
+            }
+
+            function buildCombineTable(entries) {
+                if(!entries.length) return `<div style="text-align:center;padding:30px;color:#999;"><i class="fas fa-inbox"></i><p style="margin-top:8px;">Koi entry nahi mili</p></div>`;
+                let rows = entries.map((e,i) => {
+                    let adv = e.advance || 0;
+                    if(adv === 0 && (e.balance||0) < 0) adv = Math.abs(e.balance);
+                    let bal = Math.max(0, e.balance||0);
+                    let balCell = adv > 0
+                        ? `<span style="color:#10b981;font-weight:700;">+₹${adv} Advance</span>`
+                        : `<span style="color:#ef4444;">₹${bal}</span>`;
+                    let items = Array.isArray(e.items) && e.items.length
+                        ? e.items.map(it => `${it.item}×${it.qty}`).join(', ')
+                        : (e.item || '—');
+                    return `<tr style="background:${i%2===0?'white':'#fef3f2'};">
+                        <td style="padding:1px;text-align:center;width:28px;">
+                            <input type="checkbox" class="cd-select-cb" data-id="${e.id}" onchange="window._cdToggleRow(${e.id},this)" style="width:15px;height:15px;cursor:pointer;accent-color:#667eea;">
+                        </td>
+                        <td style="padding:8px 10px;font-size:12px;white-space:nowrap;">${e.date}<br><span style="color:#999;font-size:10px;">${e.time||''}</span></td>
+                        <td style="padding:8px 10px;font-size:12px;max-width:160px;word-break:break-word;">${items}</td>
+                        <td style="padding:8px 10px;font-size:12px;text-align:right;">₹${e.discount||0}</td>
+                        <td style="padding:8px 10px;font-size:13px;font-weight:700;text-align:right;color:#ef4444;">₹${e.total||0}</td>
+                        <td style="padding:8px 10px;font-size:12px;text-align:right;color:#059669;">₹${e.submitted||0}</td>
+                        <td style="padding:8px 10px;font-size:12px;text-align:right;">${balCell}</td>
+                        <td style="padding:8px 10px;font-size:12px;">${e.modeOfPayment||'—'}</td>
+                    </tr>`;
+                }).join('');
+                return `<div style="overflow-x:auto;max-height:55vh;overflow-y:auto;">
+                <table style="width:100%;border-collapse:collapse;min-width:680px;" id="cdTable">
+                    <thead><tr style="background:#ef4444;color:white;font-size:12px;position:sticky;top:0;z-index:2;">
+                        <th style="padding:6px 4px;width:28px;"><input type="checkbox" id="cdSelectAll" onchange="window._cdToggleAll(this)" style="width:14px;height:14px;cursor:pointer;accent-color:white;"></th>
+                        <th style="padding:10px 8px;text-align:left;">Date &amp; Time</th>
+                        <th style="padding:10px 8px;text-align:left;">Items</th>
+                        <th style="padding:10px 8px;text-align:right;">Discount</th>
+                        <th style="padding:10px 8px;text-align:right;">Total</th>
+                        <th style="padding:10px 8px;text-align:right;">Submitted</th>
+                        <th style="padding:10px 8px;text-align:right;">Balance/Advance</th>
+                        <th style="padding:10px 8px;text-align:left;">Mode</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table></div>`;
+            }
+
+            window._cdSelected = new Set();
+            window._cdCurrentEntries = [];
+
+            window._cdToggleRow = function(id, cb) {
+                if(cb.checked) window._cdSelected.add(id); else window._cdSelected.delete(id);
+                let printBtn = document.getElementById('cdPrintBtn');
+                if(printBtn) printBtn.style.display = window._cdSelected.size > 0 ? 'inline-flex' : 'none';
+                let allCb = document.getElementById('cdSelectAll');
+                if(allCb) {
+                    let all = document.querySelectorAll('.cd-select-cb');
+                    let checked = document.querySelectorAll('.cd-select-cb:checked');
+                    allCb.checked = all.length > 0 && all.length === checked.length;
+                    allCb.indeterminate = checked.length > 0 && checked.length < all.length;
+                }
+            };
+
+            window._cdToggleAll = function(cb) {
+                document.querySelectorAll('.cd-select-cb').forEach(c => {
+                    c.checked = cb.checked;
+                    let id = parseInt(c.getAttribute('data-id'));
+                    if(cb.checked) window._cdSelected.add(id); else window._cdSelected.delete(id);
+                });
+                let printBtn = document.getElementById('cdPrintBtn');
+                if(printBtn) printBtn.style.display = window._cdSelected.size > 0 ? 'inline-flex' : 'none';
+            };
+
+            window._cdPrintSelected = function() {
+                let selected = window._cdCurrentEntries.filter(e => window._cdSelected.has(e.id));
+                if(!selected.length) { showPopup('Koi row select nahi ki!', false); return; }
+                let nameEl = document.getElementById('cdNameInput');
+                let name = nameEl ? nameEl.value.trim() : 'Party';
+                let rows = selected.map(e => {
+                    let adv = e.advance||0;
+                    if(adv===0&&(e.balance||0)<0) adv=Math.abs(e.balance);
+                    let bal = Math.max(0,e.balance||0);
+                    let items = Array.isArray(e.items)&&e.items.length ? e.items.map(it=>`${it.item}×${it.qty}`).join(', ') : (e.item||'—');
+                    return `<tr style="border-bottom:1px solid #e0e0e0;">
+                        <td style="padding:5px 8px;font-size:11px;">${e.date}<br><span style="color:#999;font-size:9px;">${e.time||''}</span></td>
+                        <td style="padding:5px 8px;font-size:11px;">${items}</td>
+                        <td style="padding:5px 8px;font-size:11px;text-align:right;">₹${e.discount||0}</td>
+                        <td style="padding:5px 8px;font-size:12px;font-weight:700;text-align:right;color:#ef4444;">₹${e.total||0}</td>
+                        <td style="padding:5px 8px;font-size:11px;text-align:right;color:#059669;">₹${e.submitted||0}</td>
+                        <td style="padding:5px 8px;font-size:11px;text-align:right;">${adv>0?`+₹${adv} Adv`:`₹${bal}`}</td>
+                        <td style="padding:5px 8px;font-size:11px;">${e.modeOfPayment||'—'}</td>
+                    </tr>`;
+                }).join('');
+                let html = buildPrintHeader()
+                    + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                         <span style="font-size:16px;font-weight:800;color:#1a1a2e;">Combine Details — ${name}</span>
+                         <span style="font-size:10px;color:#888;">${new Date().toLocaleDateString('en-IN')}</span>
+                       </div>`
+                    + `<table style="width:100%;border-collapse:collapse;font-size:11px;">`
+                    + `<thead><tr style="background:#ef4444;color:white;">
+                         <th style="padding:5px 8px;text-align:left;">Date</th>
+                         <th style="padding:5px 8px;text-align:left;">Items</th>
+                         <th style="padding:5px 8px;text-align:right;">Disc</th>
+                         <th style="padding:5px 8px;text-align:right;">Total</th>
+                         <th style="padding:5px 8px;text-align:right;">Submitted</th>
+                         <th style="padding:5px 8px;text-align:right;">Bal/Adv</th>
+                         <th style="padding:5px 8px;text-align:left;">Mode</th>
+                       </tr></thead>`
+                    + `<tbody>${rows}</tbody></table>`;
+                doPrint(html);
+            };
+
+            window._cdSearch = function() {
+                let nameInput = document.getElementById('cdNameInput');
+                let name = (nameInput ? nameInput.value : '').trim();
+                let resultsEl = document.getElementById('cdResults');
+                let balBoxEl = document.getElementById('cdBalanceBox');
+                let printBtn = document.getElementById('cdPrintBtn');
+                if(!resultsEl) return;
+                if(!name) {
+                    resultsEl.innerHTML = `<div style="text-align:center;padding:24px;color:#999;font-size:13px;"><i class="fas fa-search"></i><p style="margin-top:8px;">Naam type karke search karein</p></div>`;
+                    if(balBoxEl) balBoxEl.style.display = 'none';
+                    return;
+                }
+                let entries = getEntriesForName(name);
+                window._cdCurrentEntries = entries;
+                window._cdSelected = new Set();
+                if(printBtn) printBtn.style.display = 'none';
+                resultsEl.innerHTML = buildCombineTable(entries);
+                if(balBoxEl) {
+                    if(entries.length > 0) {
+                        let lb = computeLatestBalance(entries);
+                        let totalSubmitted = entries.reduce((s,e)=>s+(e.submitted||0),0);
+                        let totalTotal = entries.reduce((s,e)=>s+(e.total||0),0);
+                        if(lb.type === 'advance') {
+                            balBoxEl.style.display = 'block';
+                            balBoxEl.innerHTML = `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+                                <span style="font-size:13px;font-weight:700;color:#065f46;"><i class="fas fa-plus-circle"></i> Latest: Advance</span>
+                                <span style="font-size:20px;font-weight:800;color:#10b981;">+₹${lb.amount}</span>
+                                <span style="margin-left:auto;font-size:12px;color:#666;">Total Billed: <b>₹${totalTotal}</b> &nbsp;|&nbsp; Total Paid: <b style="color:#059669;">₹${totalSubmitted}</b></span>
+                            </div>`;
+                        } else if(lb.type === 'balance') {
+                            balBoxEl.style.display = 'block';
+                            balBoxEl.innerHTML = `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+                                <span style="font-size:13px;font-weight:700;color:#991b1b;"><i class="fas fa-wallet"></i> Latest: Balance Due</span>
+                                <span style="font-size:20px;font-weight:800;color:#ef4444;">₹${lb.amount}</span>
+                                <span style="margin-left:auto;font-size:12px;color:#666;">Total Billed: <b>₹${totalTotal}</b> &nbsp;|&nbsp; Total Paid: <b style="color:#059669;">₹${totalSubmitted}</b></span>
+                            </div>`;
+                        } else {
+                            balBoxEl.style.display = 'block';
+                            balBoxEl.innerHTML = `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+                                <span style="font-size:13px;font-weight:700;color:#059669;"><i class="fas fa-check-circle"></i> Cleared — No Balance</span>
+                                <span style="margin-left:auto;font-size:12px;color:#666;">Total Billed: <b>₹${totalTotal}</b> &nbsp;|&nbsp; Total Paid: <b style="color:#059669;">₹${totalSubmitted}</b></span>
+                            </div>`;
+                        }
+                    } else {
+                        balBoxEl.style.display = 'none';
+                    }
+                }
+            };
+
+            let nameList = getNameList();
+            let datalistOptions = nameList.map(n => `<option value="${n}">`).join('');
+
+            document.getElementById('app').innerHTML = `
+            <div class="inner-bg"><div class="sticky-header">${getHeader('Combine Details', true)}</div><div class="inner-container">
+            <div class="form-card">
+            <div class="two-column-layout" style="align-items:flex-start;margin-bottom:20px;">
+                <div class="image-column">
+                    <img src="${img.combineDetailIcon}" class="big-logo" onerror="this.onerror=null;this.src='${img.profitLossIcon}'">
+                </div>
+                <div class="form-column">
+                    <div class="form-title"><i class="fas fa-table"></i> Combine Details</div>
+                    <p style="color:#666;font-size:13px;margin-top:6px;">Party / creditor ka naam search karein — sabhi expense entries ek saath dekhein.</p>
+                </div>
+            </div>
+
+            <datalist id="cdNameDatalist">${datalistOptions}</datalist>
+            <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
+                <input type="text" id="cdNameInput" list="cdNameDatalist" placeholder="Naam type karein ya select karein..." 
+                    style="flex:1;padding:12px 14px;border:2px solid #e0e0e0;border-radius:14px;font-size:14px;"
+                    oninput="window._cdSearch()" onchange="window._cdSearch()">
+                <button id="cdPrintBtn" onclick="window._cdPrintSelected()" style="display:none;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;padding:10px 18px;border-radius:14px;font-size:13px;font-weight:700;cursor:pointer;align-items:center;gap:8px;white-space:nowrap;">
+                    <img src="${img.printIcon}" style="width:20px;height:20px;vertical-align:middle;"> Print
+                </button>
+            </div>
+
+            <div id="cdBalanceBox" style="display:none;background:#f0fdf4;border:2px solid #6ee7b7;border-radius:14px;padding:14px;margin-bottom:14px;"></div>
+
+            <div id="cdResults">
+                <div style="text-align:center;padding:30px;color:#999;font-size:13px;">
+                    <i class="fas fa-search" style="font-size:32px;color:#d1d5db;"></i>
+                    <p style="margin-top:10px;">Naam type karke search karein</p>
+                </div>
+            </div>
+
             </div></div>${getOverlay()}</div>`;
         }
 
