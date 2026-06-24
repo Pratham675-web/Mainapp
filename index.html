@@ -4504,70 +4504,100 @@
 
             function computeDefaulterData(s) {
                 let hist = (paymentHistory[s.id] || []).slice();
-                let bal = hist.reduce((acc, h) => acc + (parseFloat(h.balance) || 0), 0);
-                let allPaidMonths = new Set();
-                hist.forEach(h => { (h.months || []).forEach(m => allPaidMonths.add(m)); });
 
-                let paidEntries = hist.filter(h => (h.submittedAmount > 0 || h.amount > 0));
-                let lastPaidDate = null;
-                let lastPaidMonths = [];
-                if(paidEntries.length > 0) {
-                    paidEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
-                    lastPaidDate = new Date(paidEntries[0].date);
-                    lastPaidMonths = paidEntries[0].months || [];
+                // Regular fee entries aur admission entries alag karo
+                let regularEntries = hist.filter(h => !h.isAdmissionEntry);
+                let admissionEntries = hist.filter(h => h.isAdmissionEntry);
+
+                let lastPaidMonthName = null;
+                let lastPaidYear = nowYear;
+
+                if(regularEntries.length > 0) {
+                    // Sabse recent regular fee entry dhundho
+                    regularEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    let lastEntry = regularEntries[0];
+                    let lastEntryMonths = lastEntry.months || [];
+                    if(lastEntryMonths.length > 0) {
+                        lastPaidMonthName = lastEntryMonths[lastEntryMonths.length - 1];
+                        lastPaidYear = new Date(lastEntry.date).getFullYear();
+                    }
+                } else if(admissionEntries.length > 0) {
+                    // Sirf admission entry hai — uske months check karo
+                    admissionEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    let lastAdm = admissionEntries[0];
+                    let admMonths = lastAdm.months || [];
+                    if(admMonths.length > 0) {
+                        lastPaidMonthName = admMonths[admMonths.length - 1];
+                        lastPaidYear = new Date(lastAdm.date).getFullYear();
+                    }
                 }
 
+                // Unpaid months calculate karo
                 let unpaidMonths = [];
-                if(lastPaidDate && lastPaidMonths.length > 0) {
-                    let lastMonthName = lastPaidMonths[lastPaidMonths.length - 1];
-                    let lastMonthIdx = allMonthNames.indexOf(lastMonthName);
-                    if(lastMonthIdx < 0) { let s=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; lastMonthIdx = s.indexOf(lastMonthName); }
-                    let lastYear = lastPaidDate.getFullYear();
+                let startFromMonth, startFromYear;
+
+                if(lastPaidMonthName) {
+                    let lastMonthIdx = allMonthNames.indexOf(lastPaidMonthName);
+                    if(lastMonthIdx < 0) {
+                        let shortNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                        lastMonthIdx = shortNames.indexOf(lastPaidMonthName);
+                    }
                     if(lastMonthIdx >= 0) {
-                        let y = lastYear, m = lastMonthIdx + 1;
-                        if(m > 11) { m = 0; y++; }
-                        while(y < nowYear || (y === nowYear && m <= nowMonth)) {
-                            unpaidMonths.push(allMonthNames[m]);
-                            m++; if(m > 11) { m = 0; y++; }
-                        }
+                        // Agle mahine se shuru karo
+                        startFromMonth = (lastMonthIdx + 1) % 12;
+                        startFromYear = lastPaidYear + (lastMonthIdx === 11 ? 1 : 0);
                     }
-                } else if(!lastPaidDate && hist.length === 0) {
-                    // Kabhi koi transaction nahi hui — ab calculation January se nahi, balki
-                    // STUDENT KE ADMISSION MAHINE se shuru hogi, kyunki usse pehle ke
-                    // mahino ki fees us student par lagti hi nahi thi.
+                } else {
+                    // Koi bhi payment nahi — admission mahine se shuru karo
                     let admDate = s.admissionDate ? new Date(s.admissionDate) : null;
-                    let startMonth = 0, startYear = nowYear;
                     if(admDate && !isNaN(admDate.getTime())) {
-                        startMonth = admDate.getMonth();
-                        startYear = admDate.getFullYear();
+                        startFromMonth = admDate.getMonth();
+                        startFromYear = admDate.getFullYear();
+                    } else {
+                        startFromMonth = nowMonth;
+                        startFromYear = nowYear;
                     }
-                    let y = startYear, m = startMonth;
+                }
+
+                if(startFromMonth !== undefined) {
+                    let y = startFromYear, m = startFromMonth;
                     while(y < nowYear || (y === nowYear && m <= nowMonth)) {
                         unpaidMonths.push(allMonthNames[m]);
                         m++; if(m > 11) { m = 0; y++; }
                     }
                 }
 
+                // Har pending month ka balance calculate karo (tuition + exam fee)
                 let cls = s.className || 'Unknown';
-                let feePerMonth = (classFeesStructure[cls]?.tuitionFees || 0) + (classFeesStructure[cls]?.examFees || 0);
-                let computedBal = unpaidMonths.length > 0 && feePerMonth > 0 ? feePerMonth * unpaidMonths.length + Math.max(0, bal) : Math.max(0, bal);
+                let tuitionFeePerMonth = classFeesStructure[cls]?.tuitionFees || 0;
+                let totalOutstanding = 0;
+                unpaidMonths.forEach(monthName => {
+                    let mi = allMonthNames.indexOf(monthName);
+                    let examFee = mi >= 0 ? getExamFeeForMonth(cls, mi) : 0;
+                    totalOutstanding += tuitionFeePerMonth + examFee;
+                });
 
-                return { ...s, pendingBal: computedBal, lastPaidMonths, unpaidMonths, allPaidMonths: [...allPaidMonths], feePerMonth };
+                // Purana balance (last transaction se)
+                let oldBal = 0;
+                if(hist.length > 0) {
+                    let sortedHist = hist.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+                    oldBal = Math.max(0, parseFloat(sortedHist[0].balance) || 0);
+                }
+
+                let pendingBal = totalOutstanding + oldBal;
+                return { ...s, pendingBal, lastPaidMonthName, unpaidMonths, feePerMonth: tuitionFeePerMonth };
             }
 
             function buildDefaulterList(searchQuery) {
                 searchQuery = (searchQuery || '').toLowerCase().trim();
                 let classMap = {};
                 students.forEach(s => {
-                    let hist = (paymentHistory[s.id] || []);
-                    let paidThisMonth = hist.some(h => {
-                        let d = new Date(h.date);
-                        return d.getFullYear() === nowYear && d.getMonth() === nowMonth && (h.submittedAmount > 0 || h.amount > 0);
-                    });
-                    if(!paidThisMonth) {
+                    let data = computeDefaulterData(s);
+                    // Defaulter tab hi hoga jab unpaid months hon ya balance pending ho
+                    if(data.unpaidMonths.length > 0 || data.pendingBal > 0) {
                         let cls = s.className || 'Unknown';
                         if(!classMap[cls]) classMap[cls] = [];
-                        classMap[cls].push(computeDefaulterData(s));
+                        classMap[cls].push(data);
                     }
                 });
 
@@ -4592,14 +4622,18 @@
                                 <span style="background:rgba(255,255,255,0.25);padding:2px 10px;border-radius:20px;">${sts.length} defaulters</span>
                             </div>
                             ${sts.map(s => {
-                                let paidBadges = s.lastPaidMonths.length > 0 ? s.lastPaidMonths.map(mo=>`<span style="background:#10b981;color:white;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700;">${mo.substring(0,3)}</span>`).join('') : '';
-                                // Jo mahine sach mein paid hue hain (lastPaidMonths) sirf wahi GREEN.
-                                // Baaki sabhi pending months (current mahina sahit) RED — taaki
-                                // bina kisi transaction ke bhi koi mahina galti se "paid" na lage.
-                                let unpaidBadges = s.unpaidMonths.length > 0 ? s.unpaidMonths.map(mo=>{
-                                    return `<span style="background:#ef4444;color:white;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700;">${mo.substring(0,3)}</span>`;
+                                // Sirf LAST paid month GREEN badge mein dikhao
+                                let lastPaidBadge = s.lastPaidMonthName
+                                    ? `<span style="background:#10b981;color:white;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;" title="Last paid month">✓ ${s.lastPaidMonthName.substring(0,3)}</span>`
+                                    : '';
+                                // Pending months RED badges, exam fee wale mahine par yellow star
+                                let unpaidBadges = s.unpaidMonths.length > 0 ? s.unpaidMonths.map(mo => {
+                                    let mi = allMonthNames.indexOf(mo);
+                                    let hasExam = mi >= 0 && getExamFeeForMonth(s.className||'', mi) > 0;
+                                    let examTag = hasExam ? `<sup style="background:#f59e0b;color:white;padding:0 3px;border-radius:4px;font-size:8px;">E</sup>` : '';
+                                    return `<span style="background:#ef4444;color:white;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700;">${mo.substring(0,3)}${examTag}</span>`;
                                 }).join('') : '';
-                                let noHistBadge = !paidBadges && !unpaidBadges ? '<span style="font-size:10px;color:#999;font-style:italic;">No payment history</span>' : '';
+                                let noHistBadge = !lastPaidBadge && !unpaidBadges ? '<span style="font-size:10px;color:#999;font-style:italic;">No payment history</span>' : '';
                                 let descLine = s.unpaidMonths.length > 0 ? `<div style="font-size:11px;color:#ef4444;font-weight:600;margin-top:4px;"><i class="fas fa-exclamation-circle"></i> ${s.unpaidMonths.length} month(s) pending since ${s.unpaidMonths[0]||''}</div>` : '';
                                 return `<div style="background:white;border:1px solid #fecaca;padding:12px 16px;border-top:none;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
                                     <div style="flex:1;min-width:0;">
@@ -4614,15 +4648,19 @@
                                             ${s.feePerMonth > 0 ? `&nbsp;<span style="color:#667eea;font-weight:600;">₹${s.feePerMonth}/mo</span>` : ''}
                                         </div>
                                         <div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;">
-                                            ${paidBadges}
+                                            ${lastPaidBadge}
+                                            ${lastPaidBadge && unpaidBadges ? '<span style="color:#ccc;font-size:12px;">→</span>' : ''}
                                             ${unpaidBadges}
                                             ${noHistBadge}
                                         </div>
                                         ${descLine}
                                     </div>
-                                    <div style="text-align:right;flex-shrink:0;">
-                                        ${s.pendingBal > 0 ? `<div style="background:#fef2f2;color:#ef4444;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:800;margin-bottom:6px;">₹${s.pendingBal}</div>` : ''}
-                                        <button onclick="printDefaulterSlip('${s.id}','${s.name}','${s.fatherName||''}','${s.contact||''}','${cls}','${s.rollNo||''}','${s.admissionNumber||''}',${s.pendingBal},'${s.unpaidMonths.join(',')}','${s.feePerMonth}')" title="Print Slip" style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;padding:5px 12px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;"><i class="fas fa-print"></i> Slip</button>
+                                    <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;gap:5px;align-items:flex-end;">
+                                        ${s.pendingBal > 0 ? `<div style="background:#fef2f2;color:#ef4444;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:800;">₹${s.pendingBal}</div>` : ''}
+                                        <div style="display:flex;gap:5px;">
+                                            <button onclick="navigateTo(renderHistoryPage,'${s.id}','${s.name}')" title="Transaction History" style="background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;padding:5px 10px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;"><i class="fas fa-history"></i></button>
+                                            <button onclick="printDefaulterSlip('${s.id}','${s.name}','${s.fatherName||''}','${s.contact||''}','${cls}','${s.rollNo||''}','${s.admissionNumber||''}',${s.pendingBal},'${s.unpaidMonths.join(',')}','${s.feePerMonth}')" title="Print Slip" style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;padding:5px 10px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;"><i class="fas fa-print"></i></button>
+                                        </div>
                                     </div>
                                 </div>`;
                             }).join('')}
@@ -4972,7 +5010,9 @@
 
             function buildApprovalList(filter) {
                 window._approvalFilter = filter;
-                let filtered = [...admissions];
+                // approvalDeleted wale approved admissions approval list mein nahi dikhenge
+                // (woh class list mein rehte hain — sirf approval list se hata diye)
+                let filtered = [...admissions].filter(a => !a.approvalDeleted);
                 if(filter === 'pending') filtered = filtered.filter(a => a.status !== 'approved');
                 else if(filter === 'approved') filtered = filtered.filter(a => a.status === 'approved');
                 else if(filter === 'date_new') filtered = filtered.sort((a,b) => new Date(b.date||0) - new Date(a.date||0));
@@ -5065,10 +5105,18 @@
         }
 
         function deleteAdmission(id) {
-            admissions = admissions.filter(a => String(a.id) !== String(id));
-            fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions', JSON.stringify(admissions));
+            let adm = admissions.find(a => String(a.id) === String(id));
+            if(adm && adm.status === 'approved') {
+                // Approved student ko class se DELETE nahi karna — sirf approval list se hatao
+                adm.approvalDeleted = true;
+                fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions', JSON.stringify(admissions));
+            } else {
+                // Pending admission — puri tarah hata do
+                admissions = admissions.filter(a => String(a.id) !== String(id));
+                fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions', JSON.stringify(admissions));
+            }
             let popup = document.getElementById('customPopup');
-            if(popup){ popup.innerHTML = '<i class="fas fa-check-circle"></i> Admission deleted successfully!'; popup.style.background='#10b981'; popup.style.display='flex'; setTimeout(()=>popup.style.display='none',3000); }
+            if(popup){ popup.innerHTML = '<i class="fas fa-check-circle"></i> Removed from approval list!'; popup.style.background='#10b981'; popup.style.display='flex'; setTimeout(()=>popup.style.display='none',3000); }
             navigateTo(renderApproval);
         }
 
@@ -5603,6 +5651,15 @@
                     let primaryId = studentIds[0];
                     if(primaryId) {
                         if(!paymentHistory[primaryId]) paymentHistory[primaryId] = [];
+                        // Billing rows mein se Tuition Fees ke selected months extract karo
+                        let admissionMonths = [];
+                        rows.forEach(row => {
+                            let match = (row.name || '').match(/Tuition Fees \(([^)]+)\)/i);
+                            if(match) {
+                                let ms = match[1].split(',').map(m => m.trim()).filter(Boolean);
+                                ms.forEach(m => { if(!admissionMonths.includes(m)) admissionMonths.push(m); });
+                            }
+                        });
                         paymentHistory[primaryId].push({
                             date: new Date().toLocaleString(),
                             isAdmissionEntry: true,
@@ -5610,7 +5667,7 @@
                             totalAmount: finalTotalRaw,
                             submittedAmount: submittedRaw,
                             balance: balanceRaw,
-                            months: [],
+                            months: admissionMonths,
                             fees: {},
                             amount: submittedRaw,
                             memberTotal: finalTotalRaw,
@@ -8253,4 +8310,3 @@
     </script>
 </body>
 </html>
-
