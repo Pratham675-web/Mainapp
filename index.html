@@ -4510,64 +4510,85 @@
                 let admissionEntries = hist.filter(h => h.isAdmissionEntry);
 
                 let lastPaidMonthName = null;
-                let lastPaidYear = nowYear;
+                let lastPaidMonthIdx = -1;
+                let lastEntryBalance = 0;
+                let shortMonthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+                // IMPORTANT: Indian locale dates ("24/06/2026, 10:09:35") ko new Date()
+                // parse nahi kar sakta (NaN aata hai). Isliye date pe BILKUL bharosa nahi
+                // karna — sirf month name ke INDEX se last paid month nikalo.
+                function findMonthIdx(name) {
+                    let i = allMonthNames.indexOf(name);
+                    if(i >= 0) return i;
+                    return shortMonthNames.indexOf(name);
+                }
 
                 if(regularEntries.length > 0) {
-                    // Sabse recent regular fee entry dhundho
-                    regularEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
-                    let lastEntry = regularEntries[0];
-                    let lastEntryMonths = lastEntry.months || [];
-                    if(lastEntryMonths.length > 0) {
-                        lastPaidMonthName = lastEntryMonths[lastEntryMonths.length - 1];
-                        lastPaidYear = new Date(lastEntry.date).getFullYear();
-                    }
+                    // Sabhi regular entries ke sabhi months scan karo — highest index = last paid
+                    regularEntries.forEach(entry => {
+                        (entry.months || []).forEach(m => {
+                            let mi = findMonthIdx(m);
+                            if(mi > lastPaidMonthIdx) {
+                                lastPaidMonthIdx = mi;
+                                lastPaidMonthName = allMonthNames[mi];
+                                // Is entry ka remaining balance save karo
+                                lastEntryBalance = Math.max(0, parseFloat(entry.balance) || 0);
+                            }
+                        });
+                    });
                 } else if(admissionEntries.length > 0) {
-                    // Sirf admission entry hai — uske months check karo
-                    admissionEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
-                    let lastAdm = admissionEntries[0];
-                    let admMonths = lastAdm.months || [];
-                    if(admMonths.length > 0) {
-                        lastPaidMonthName = admMonths[admMonths.length - 1];
-                        lastPaidYear = new Date(lastAdm.date).getFullYear();
-                    }
+                    // Sirf admission entry — uske months check karo
+                    (admissionEntries[0].months || []).forEach(m => {
+                        let mi = findMonthIdx(m);
+                        if(mi > lastPaidMonthIdx) {
+                            lastPaidMonthIdx = mi;
+                            lastPaidMonthName = allMonthNames[mi];
+                        }
+                    });
                 }
 
-                // Unpaid months calculate karo
+                // Unpaid months — YEAR BHI month index se nikalo, date parsing se NAHI
                 let unpaidMonths = [];
-                let startFromMonth, startFromYear;
 
-                if(lastPaidMonthName) {
-                    let lastMonthIdx = allMonthNames.indexOf(lastPaidMonthName);
-                    if(lastMonthIdx < 0) {
-                        let shortNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                        lastMonthIdx = shortNames.indexOf(lastPaidMonthName);
+                if(lastPaidMonthName && lastPaidMonthIdx >= 0) {
+                    let startMonth, startYear;
+                    if(lastPaidMonthIdx < nowMonth) {
+                        // Same year: April(3) paid, now June(5) → start May, same year
+                        startMonth = lastPaidMonthIdx + 1;
+                        startYear = nowYear;
+                    } else if(lastPaidMonthIdx === nowMonth) {
+                        // Current month already paid → koi pending nahi
+                        startMonth = -1;
+                    } else {
+                        // Cross-year: October(9) paid, now June(5) → Nov prev year se shuru
+                        startMonth = lastPaidMonthIdx + 1;
+                        startYear = nowYear - 1;
+                        if(startMonth > 11) { startMonth = 0; startYear = nowYear; }
                     }
-                    if(lastMonthIdx >= 0) {
-                        // Agle mahine se shuru karo
-                        startFromMonth = (lastMonthIdx + 1) % 12;
-                        startFromYear = lastPaidYear + (lastMonthIdx === 11 ? 1 : 0);
+                    if(startMonth >= 0) {
+                        let y = startYear, m = startMonth;
+                        while(y < nowYear || (y === nowYear && m <= nowMonth)) {
+                            unpaidMonths.push(allMonthNames[m]);
+                            m++; if(m > 11) { m = 0; y++; }
+                        }
                     }
                 } else {
-                    // Koi bhi payment nahi — admission mahine se shuru karo
+                    // Koi bhi month payment record nahi — admission date se try karo
                     let admDate = s.admissionDate ? new Date(s.admissionDate) : null;
                     if(admDate && !isNaN(admDate.getTime())) {
-                        startFromMonth = admDate.getMonth();
-                        startFromYear = admDate.getFullYear();
+                        let sm = admDate.getMonth(), sy = admDate.getFullYear();
+                        let y = sy, m = sm;
+                        while(y < nowYear || (y === nowYear && m <= nowMonth)) {
+                            unpaidMonths.push(allMonthNames[m]);
+                            m++; if(m > 11) { m = 0; y++; }
+                        }
                     } else {
-                        startFromMonth = nowMonth;
-                        startFromYear = nowYear;
+                        // Fallback: sirf current month pending
+                        unpaidMonths.push(allMonthNames[nowMonth]);
                     }
                 }
 
-                if(startFromMonth !== undefined) {
-                    let y = startFromYear, m = startFromMonth;
-                    while(y < nowYear || (y === nowYear && m <= nowMonth)) {
-                        unpaidMonths.push(allMonthNames[m]);
-                        m++; if(m > 11) { m = 0; y++; }
-                    }
-                }
-
-                // Har pending month ka balance calculate karo (tuition + exam fee)
+                // Har pending month: tuition + exam fee
                 let cls = s.className || 'Unknown';
                 let tuitionFeePerMonth = classFeesStructure[cls]?.tuitionFees || 0;
                 let totalOutstanding = 0;
@@ -4577,14 +4598,8 @@
                     totalOutstanding += tuitionFeePerMonth + examFee;
                 });
 
-                // Purana balance (last transaction se)
-                let oldBal = 0;
-                if(hist.length > 0) {
-                    let sortedHist = hist.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
-                    oldBal = Math.max(0, parseFloat(sortedHist[0].balance) || 0);
-                }
-
-                let pendingBal = totalOutstanding + oldBal;
+                // lastEntryBalance = last regular payment ke baad jo bach gaya tha
+                let pendingBal = totalOutstanding + lastEntryBalance;
                 return { ...s, pendingBal, lastPaidMonthName, unpaidMonths, feePerMonth: tuitionFeePerMonth };
             }
 
@@ -8310,4 +8325,3 @@
     </script>
 </body>
 </html>
-
