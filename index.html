@@ -189,6 +189,7 @@
             if(_allowNextUnload) return; // already confirmed via our own dialog
             try {
                 var _cu = JSON.parse(sessionStorage.getItem('eRegister_currentUser') || 'null');
+                if(!_cu) return; // Not logged in — tab close karna free hona chahiye
                 if(_cu && _cu.isCoAdmin){
                     // Co-admin: refresh/close hote hi session clear — relogin required.
                     sessionStorage.removeItem('eRegister_currentUser');
@@ -239,35 +240,31 @@
         }
 
         // ── Sequence number helpers ──
-        let _admissionSeqNumber = parseInt(localStorage.getItem('eRegister_admission_seq') || '0');
-        let _qpSeqNumber = parseInt(localStorage.getItem('eRegister_qp_seq') || '0');
-        let _fcSeqNumber = parseInt(localStorage.getItem('eRegister_fc_seq') || '0');
-        let _adrSeqNumber = parseInt(localStorage.getItem('eRegister_adr_seq') || '0');
+        let _admissionSeqNumber = 0; // Firestore se load hoga applyFsData mein
+        let _qpSeqNumber = 0; // Firestore se load hoga
+        let _fcSeqNumber = 0; // Firestore se load hoga
+        let _adrSeqNumber = 0; // Firestore se load hoga
 
         function getNextAdmissionNumber() {
             _admissionSeqNumber = (_admissionSeqNumber || 0) + 1;
-            localStorage.setItem('eRegister_admission_seq', String(_admissionSeqNumber));
             SCHOOL_DOC.set({ admissionSeqNumber: String(_admissionSeqNumber) }, { merge: true }).catch(()=>{});
             return 'ADM-' + String(_admissionSeqNumber).padStart(4, '0');
         }
 
         function getNextQPNumber() {
             _qpSeqNumber = (_qpSeqNumber || 0) + 1;
-            localStorage.setItem('eRegister_qp_seq', String(_qpSeqNumber));
             SCHOOL_DOC.set({ qpSeqNumber: String(_qpSeqNumber) }, { merge: true }).catch(()=>{});
             return 'QP-' + String(_qpSeqNumber).padStart(4, '0');
         }
 
         function getNextFCNumber() {
             _fcSeqNumber = (_fcSeqNumber || 0) + 1;
-            localStorage.setItem('eRegister_fc_seq', String(_fcSeqNumber));
             SCHOOL_DOC.set({ fcSeqNumber: String(_fcSeqNumber) }, { merge: true }).catch(()=>{});
             return 'FC-' + String(_fcSeqNumber).padStart(4, '0');
         }
 
         function getNextADRNumber() {
             _adrSeqNumber = (_adrSeqNumber || 0) + 1;
-            localStorage.setItem('eRegister_adr_seq', String(_adrSeqNumber));
             SCHOOL_DOC.set({ adrSeqNumber: String(_adrSeqNumber) }, { merge: true }).catch(()=>{});
             return 'ADR-' + String(_adrSeqNumber).padStart(4, '0');
         }
@@ -284,7 +281,6 @@
             let n = parseInt(String(fcNumberStr).replace(/\D/g, ''), 10) || 0;
             if(n > (_fcSeqNumber || 0)) {
                 _fcSeqNumber = n;
-                localStorage.setItem('eRegister_fc_seq', String(_fcSeqNumber));
                 SCHOOL_DOC.set({ fcSeqNumber: String(_fcSeqNumber) }, { merge: true }).catch(()=>{});
             }
             return fcNumberStr;
@@ -386,9 +382,7 @@
         .reset-receipt-switch input:checked + .reset-receipt-slider:before { transform: translateX(22px); }
         .back-btn { background: none; border: none; font-size: 16px; font-weight: 600; color: #667eea; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 30px; transition: 0.3s; }
         .back-btn:hover { background: rgba(102,126,234,0.1); }
-        .wallet-coin { display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #fef3c7, #fde68a); padding: 6px 15px; border-radius: 40px; }
-        .wallet-coin img { width: 28px; height: 28px; object-fit: contain; }
-        .coin-text { font-weight: 700; color: #b45309; }
+
         .notification-icon { position: relative; cursor: pointer; font-size: 22px; color: #667eea; }
         .notification-badge { position: absolute; top: -8px; right: -12px; background: #ef4444; color: white; font-size: 10px; padding: 2px 6px; border-radius: 50%; display: none; }
         .notification-panel { position: fixed; top: 0; right: -400px; width: 380px; height: 100vh; background: white; z-index: 1000; transition: right 0.3s; display: flex; flex-direction: column; }
@@ -416,23 +410,18 @@
         .plan-card-yearly { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 45%, #ec4899 100%); animation: planGlowGold 2.4s ease-in-out infinite; }
         .plan-shine { position: absolute; top: 0; left: -120%; width: 70%; height: 100%; background: linear-gradient(105deg, transparent 25%, rgba(255,255,255,0.45) 50%, transparent 75%); animation: planShine 2s ease-in-out infinite; pointer-events: none; border-radius: 100px; }
         .plan-shine-2 { animation-delay: 1s; }
-        .plan-badge { display: inline-block; background: rgba(255,255,255,0.25); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.4); padding: 5px 16px; border-radius: 40px; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 14px; }
+
         .plan-name { font-size: 28px; font-weight: 800; margin-bottom: 6px; text-shadow: 0 2px 8px rgba(0,0,0,0.2); }
         .plan-price { font-size: 48px; font-weight: 900; letter-spacing: -1px; margin-bottom: 16px; text-shadow: 0 3px 12px rgba(0,0,0,0.25); }
         .plan-price span { font-size: 22px; font-weight: 600; vertical-align: super; margin-right: 2px; }
         .plan-features { list-style: none; padding: 0; margin: 0 0 24px; display: flex; flex-direction: column; gap: 8px; }
         .plan-features li { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; }
         .plan-features li::before { content: "✦"; font-size: 13px; opacity: 0.9; }
-        .plan-get-btn { display: inline-block; background: rgba(255,255,255,0.22); backdrop-filter: blur(12px); border: 2px solid rgba(255,255,255,0.5); color: white; font-size: 16px; font-weight: 800; padding: 14px 36px; border-radius: 50px; cursor: pointer; letter-spacing: 0.5px; transition: 0.2s; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+
         .plan-get-btn:hover { background: rgba(255,255,255,0.35); transform: scale(1.04); }
         .plan-best-tag { position: absolute; top: 20px; right: 20px; background: white; color: #ef4444; font-size: 11px; font-weight: 900; padding: 5px 14px; border-radius: 40px; letter-spacing: 1px; text-transform: uppercase; box-shadow: 0 2px 10px rgba(0,0,0,0.15); }
-        @keyframes planShine { 0% { left: -120%; } 100% { left: 180%; } }
-        @keyframes planGlowBlue { 0%,100% { box-shadow: 0 12px 48px rgba(102,126,234,0.5); } 50% { box-shadow: 0 18px 65px rgba(240,147,251,0.7), 0 0 40px rgba(102,126,234,0.4); } }
-        @keyframes planGlowGold { 0%,100% { box-shadow: 0 12px 48px rgba(245,158,11,0.5); } 50% { box-shadow: 0 18px 65px rgba(236,72,153,0.7), 0 0 40px rgba(239,68,68,0.4); } }
-        @keyframes trialFloat { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-8px); } }
-        .trial-countdown { font-size:20px; font-weight:800; background:rgba(255,255,255,0.25); border-radius:20px; padding:10px 22px; display:block; margin-bottom:16px; text-shadow:0 2px 8px rgba(0,0,0,0.2); letter-spacing:0.5px; text-align:center; }
-        .expired-blur-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); backdrop-filter:blur(6px); z-index:500; }
-        .expired-popup { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:white; border-radius:28px; padding:36px 32px; max-width:380px; width:90%; text-align:center; z-index:600; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+
+
         .welcome-popup-overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:800; display:flex; align-items:center; justify-content:center; }
         .welcome-popup-box { background:white; border-radius:28px; padding:36px 32px; max-width:380px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); animation:slideUp 0.4s ease; }
         .popup-controller-msg { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.55); z-index:900; display:flex; align-items:center; justify-content:center; }
@@ -449,9 +438,7 @@
             .menu-bar { padding: 8px 14px; }
             .menu-left { gap: 12px; }
             .menu-item { font-size: 13px; }
-            .wallet-coin { padding: 5px 10px; }
-            .wallet-coin img { width: 20px; height: 20px; }
-            .coin-text { font-size: 12px; }
+
             .dashboard-container { padding: 10px; }
             .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
             .stat-card { padding: 10px 5px; border-radius: 14px; }
@@ -663,11 +650,10 @@
     <script>
         // ── Helper: parse a Firestore field (string) or fall back to localStorage ──
         function fsGet(fsData, fsKey, lsKey, defaultVal) {
+            // Data sirf Firestore se load hota hai — localStorage fallback hataya gaya
             if(fsData && fsData[fsKey] !== undefined) {
                 try { return JSON.parse(fsData[fsKey]); } catch(e) {}
             }
-            let ls = localStorage.getItem(lsKey);
-            if(ls) { try { return JSON.parse(ls); } catch(e) {} }
             return defaultVal;
         }
 
@@ -719,7 +705,7 @@
         let itemsFees = {};
         let booksFees = {};
         let admissionSettings = { activityCharge: 0, entranceTest: 0, buildingCharge: 0, facultyCharge: 0, firstAidCharge: 0, smartClassCharge: 0, registrationCharge: 0, dresses: [] };
-        let coinsData = null;
+        // coinsData variable removed — coin system disabled
         let printSettings = (()=>{ try { return JSON.parse(localStorage.getItem('eRegister_printSettings'))||null; } catch(e){ return null; } })() || { logoData:'', orgName:'', address:'', billingFields:{studentName:true,studentClass:true,fatherName:true,motherName:true,dob:true,contact:true,gender:true,aadhar:true,address:true,prevSchool:true,admissionDate:true,billingTable:true,grandTotal:true,discount:true,totalAmount:true,submittedAmount:true,balance:true}, feesFields:{months:true,table:true,oldBalance:true,grandTotal:true,discount:true,afterDiscount:true,submittedAmount:true,balance:true,remark:true,dateTime:true}, feesPageSize:'half' };
 
         const defaultClassList = [
@@ -802,8 +788,8 @@
             combineDetailIcon: 'https://i.ibb.co/zVr5wrQg'
         };
 
-        function saveClassList() { fsSave('classList', classList); localStorage.setItem('eRegister_class_list', JSON.stringify(classList)); }
-        function saveFreeStudents() { fsSave('freeStudentsList', freeStudentsList); localStorage.setItem('eRegister_free_students', JSON.stringify(freeStudentsList)); }
+        function saveClassList() { fsSave('classList', classList); }
+        function saveFreeStudents() { fsSave('freeStudentsList', freeStudentsList); }
         function saveUsers() { fsSaveWithChecksum('users', users); }
 
         function sanitize(str) {
@@ -847,7 +833,7 @@
             let checksum = simpleHash(value);
             _targetDoc(field).set({ [field]: JSON.stringify(value), [field + '_cs']: checksum }, { merge: true })
                 .catch(e => console.warn('Firestore write failed:', e));
-            localStorage.setItem('eRegister_' + field, JSON.stringify(value));
+            // localStorage write removed — sirf Firestore mein save hota hai
         }
         function verifyChecksum(fsData, field) {
             if(!fsData || !fsData[field]) return true;
@@ -871,48 +857,11 @@
                 + '</div>';
         }
 
-        function initCoinSystem() {
-            if(!coinsData) coinsData = { startDate: Date.now(), addedCoins: 0 };
-            if(coinsData.count !== undefined && coinsData.startDate === undefined) {
-                let daysUsed = 30 - Math.max(0, coinsData.count);
-                coinsData.startDate = Date.now() - (daysUsed * 86400000);
-                coinsData.addedCoins = 0;
-                delete coinsData.count;
-                delete coinsData.lastTick;
-                if(currentUser && currentUser.code) { _saveUserCoins(currentUser.code, coinsData); }
-                else { fsSave('coins', coinsData); }
-                localStorage.setItem('eRegister_coins', JSON.stringify(coinsData));
-            }
-        }
-        function getCurrentCoins() {
-            if(!coinsData || !coinsData.startDate) {
-                if(currentUser && currentUser.trialStartDate) {
-                    let d = Math.floor((Date.now() - currentUser.trialStartDate) / 86400000);
-                    return Math.max(0, 7 - d);
-                }
-                return 7;
-            }
-            let daysSinceStart = Math.floor((Date.now() - coinsData.startDate) / 86400000);
-            let added = coinsData.addedCoins || 0;
-            if(coinsData.isTrial) return Math.max(0, 7 + added - daysSinceStart);
-            return Math.max(0, 30 + added - daysSinceStart);
-        }
-        function addCoins(amount) {
-            if(!coinsData) coinsData = { startDate: Date.now(), addedCoins: 0 };
-            let n = Math.max(0, parseInt(amount) || 0);
-            coinsData.addedCoins = (coinsData.addedCoins || 0) + n;
-            _saveUserCoins(currentUser && currentUser.code, coinsData);
-            localStorage.setItem('eRegister_coins', JSON.stringify(coinsData));
-            // Track plan type based on coins added
-            if(n >= 300) localStorage.setItem('eRegister_plan_type', 'yearly');
-            else if(n >= 25) localStorage.setItem('eRegister_plan_type', 'monthly');
-        }
-        function _saveUserCoins(code, coinsObj) {
-            if(!code) return;
-            rawCoinsMap = Object.assign({}, rawCoinsMap, {[code]: coinsObj});
-            fsSave('coins', rawCoinsMap);
-            localStorage.setItem('eRegister_coins', JSON.stringify(coinsObj));
-        }
+        // === COIN SYSTEM REMOVED — Unlimited access for all users ===
+        function initCoinSystem() { } // no-op
+        function getCurrentCoins() { return 9999; } // always high — no expiry
+        function addCoins(amount) { } // no-op
+        function _saveUserCoins(code, coinsObj) { } // no-op
 
         let _sessionTimer = null, _sessionWarnTimer = null;
         function setupSessionTimeout() {
@@ -959,14 +908,7 @@
             badge.style.background = unread > 0 ? '' : '#94a3b8';
         }
 
-        // Wallet coin badge (header) ko live update karta hai — jab bhi Admin Controller
-        // se coins add/deduct hote hain, registry listener yeh call karega taaki wallet
-        // ka number bina page refresh/navigate kiye turant update ho jaaye.
-        function updateWalletBadge() {
-            const el = document.querySelector('.coin-text');
-            if (!el || !currentUser) return;
-            el.innerHTML = `<i class="fas fa-coins"></i> ${getCurrentCoins()} Coin`;
-        }
+        function updateWalletBadge() { } // coin system removed
 
         function showPopup(msg, ok=true) { let p = document.getElementById('customPopup'); if(p){ p.innerHTML = `<i class="fas ${ok?'fa-check-circle':'fa-exclamation-circle'}"></i> ${msg}`; p.style.background = ok ? '#10b981' : '#ef4444'; p.style.display='flex'; setTimeout(()=>p.style.display='none',3000); } }
         function showProgress(cb) { let c = document.getElementById('progressContainer'), b = document.getElementById('progressBar'); if(c){ c.style.display='block'; let w=0; let i=setInterval(()=>{ w+=10; b.style.width=w+'%'; if(w>=100){ clearInterval(i); setTimeout(()=>{ c.style.display='none'; b.style.width='0%'; if(cb) cb(); },500); } },50); } else if(cb) cb(); }
@@ -1044,7 +986,7 @@
                 details: details
             });
             if(activityLog.length > 1000) activityLog = activityLog.slice(0, 1000);
-            fsSave('activityLog', activityLog); localStorage.setItem('eRegister_activity_log', JSON.stringify(activityLog));
+            fsSave('activityLog', activityLog);
         }
         function logout() {
             if(currentUser && currentUser.isCoAdmin) logActivity('Logout', 'Co-admin logged out');
@@ -1071,7 +1013,7 @@
             const myCode = currentUser?.code;
             const myNotifs = notifications.filter(n => n.targetCode === myCode && n.msgType !== 'popup').slice().reverse();
             let changed = false;
-            notifications.forEach(n => { if(n.targetCode === myCode && !n.read) { n.read = true; changed = true; } });
+            notifications.forEach(n => { if(n.targetCode === myCode && !n.read && n.msgType !== 'popup') { n.read = true; changed = true; } });
             if(changed) { fsSave('notifications', notifications); }
             updateNotifBadge();
             if (myNotifs.length === 0) {
@@ -1108,12 +1050,12 @@
                     {key:'student', html:`<a onclick="navigateTo(renderStudentList)"><i class="fas fa-user-graduate"></i> Student</a>`},
                     {key:'teacher', html:`<a onclick="navigateTo(renderTeacherList)"><i class="fas fa-chalkboard-user"></i> Staff</a>`},
                     {key:'result', html:`<a onclick="navigateTo(renderResultClassList)"><i class="fas fa-chart-line"></i> Result</a>`},
-                    {key:'plans', html:`<a onclick="navigateTo(renderPlans)"><i class="fas fa-crown"></i> Plans</a>`}
+                    // Plans menu item removed — coin system disabled
                 ];
                 let opHtml = opItemsAll.filter(it => hasPerm('operation', it.key)).map(it => it.html).join('');
                 leftSection = `<div class="menu-left"><div class="menu-item"><i class="fas fa-file-alt"></i> File<div class="dropdown">${fileHtml}</div></div><div class="menu-item"><i class="fas fa-cogs"></i> Operation<div class="dropdown">${opHtml}</div></div></div>`;
             }
-            return `<div class="dashboard-header"><h3><i class="fas fa-book-open"></i> e-Register</h3><div class="header-right"><span><i class="fas fa-user-circle"></i> ${currentUser?.name||''} (${currentUser?.designation||''})</span><button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button></div></div><div class="menu-bar">${leftSection}<div class="menu-right"><div class="wallet-coin"><img src="${img.walletCoin}"><span class="coin-text"><i class="fas fa-coins"></i> ${getCurrentCoins()} Coin</span></div><div class="notification-icon" onclick="togglePanel()"><i class="fas fa-bell"></i><span id="notificationBadge" class="notification-badge"></span></div></div></div>`;
+            return `<div class="dashboard-header"><h3><i class="fas fa-book-open"></i> e-Register</h3><div class="header-right"><span><i class="fas fa-user-circle"></i> ${currentUser?.name||''} (${currentUser?.designation||''})</span><button class="logout-btn" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button></div></div><div class="menu-bar">${leftSection}<div class="menu-right"><div class="notification-icon" onclick="togglePanel()"><i class="fas fa-bell"></i><span id="notificationBadge" class="notification-badge"></span></div></div></div>`;
         }
 
         function getOverlay() { return `<div id="overlay" class="overlay" onclick="togglePanel()"></div><div id="notificationPanel" class="notification-panel"><div class="notification-header"><h4><i class="fas fa-bell"></i> Notifications</h4><button class="close-notification" onclick="togglePanel()">×</button></div><div class="notification-list"><div class="no-notification"><i class="fas fa-bell-slash"></i><p>No notifications yet</p></div></div></div><div id="customPopup" class="popup-message"></div>`; }
@@ -1283,25 +1225,17 @@
             if(!Array.isArray(quickPayments)) quickPayments = [];
             window._inventoryData = fsGet(fsData, 'inventoryData', 'eRegister_inventory', []);
             if(!Array.isArray(window._inventoryData)) window._inventoryData = [];
-            let seqRaw = fsData && fsData['admissionSeqNumber'] ? fsData['admissionSeqNumber'] : (localStorage.getItem('eRegister_admission_seq') || '0');
+            let seqRaw = fsData && fsData['admissionSeqNumber'] ? fsData['admissionSeqNumber'] : '0';
             _admissionSeqNumber = parseInt(seqRaw) || 0;
-            let qpSeqRaw = fsData && fsData['qpSeqNumber'] ? fsData['qpSeqNumber'] : (localStorage.getItem('eRegister_qp_seq') || '0');
+            let qpSeqRaw = fsData && fsData['qpSeqNumber'] ? fsData['qpSeqNumber'] : '0';
             _qpSeqNumber = parseInt(qpSeqRaw) || 0;
-            let fcSeqRaw = fsData && fsData['fcSeqNumber'] ? fsData['fcSeqNumber'] : (localStorage.getItem('eRegister_fc_seq') || '0');
+            let fcSeqRaw = fsData && fsData['fcSeqNumber'] ? fsData['fcSeqNumber'] : '0';
             _fcSeqNumber = parseInt(fcSeqRaw) || 0;
-            let adrSeqRaw = fsData && fsData['adrSeqNumber'] ? fsData['adrSeqNumber'] : (localStorage.getItem('eRegister_adr_seq') || '0');
+            let adrSeqRaw = fsData && fsData['adrSeqNumber'] ? fsData['adrSeqNumber'] : '0';
             _adrSeqNumber = parseInt(adrSeqRaw) || 0;
 
             defaultItemsList.forEach(item => { if(itemsFees[item] === undefined) itemsFees[item] = 0; });
-
-            let savedCoinsRaw = fsGet(fsData, 'coins', 'eRegister_coins', null);
-            if(savedCoinsRaw) {
-                rawCoinsMap = savedCoinsRaw;
-                coinsData = savedCoinsRaw;
-            } else {
-                rawCoinsMap = {};
-                coinsData = { startDate: Date.now(), addedCoins: 0 };
-            }
+            // Coin system removed from applyFsData
             initCoinSystem();
 
             if(fsData && fsData['stopApp']) {
@@ -1348,7 +1282,7 @@
                     if(raw.stopApp) { try { stopAppState = JSON.parse(raw.stopApp); } catch(e) {} }
                     else { stopAppState = null; }
                     if(raw.notifications) { try { notifications = JSON.parse(raw.notifications); updateNotifBadge(); if(currentUser) checkAndShowPopupMessages(); } catch(e) {} }
-                    if(raw.coins) { try { const cm = JSON.parse(raw.coins); rawCoinsMap = cm; if(currentUser) { const uc=cm[currentUser.code]||cm; if(uc&&(uc.startDate||uc.addedCoins!==undefined)) coinsData=uc; updateWalletBadge(); if(getCurrentCoins() <= 0) showExpiredOverlay(); } else { coinsData=cm; } } catch(e) {} }
+                    // coins real-time update removed — coin system disabled
                     if(raw.users) { try { users = JSON.parse(raw.users); } catch(e) {} }
                     if(raw.coAdmins) { try { coAdmins = JSON.parse(raw.coAdmins); if(!Array.isArray(coAdmins)) coAdmins=[]; } catch(e) {} }
                     if(stopAppState && stopAppState.active && currentUser) {
@@ -1478,9 +1412,7 @@
             currentUser = coAdminUser;
             sessionStorage.setItem('eRegister_currentUser', JSON.stringify(coAdminUser));
             await loadAdminScopedData(ca.adminCode);
-            const cm = coinsData;
-            if(cm && cm[adminUser.code]) coinsData = cm[adminUser.code];
-            else if(cm && cm.startDate) coinsData = cm;
+            // Coin system removed — unlimited access
             setupSessionTimeout();
             logActivity('Login', 'Co-admin logged in');
             navigateTo(renderHome);
@@ -1537,16 +1469,7 @@
                 sessionStorage.setItem('eRegister_currentUser', JSON.stringify(user));
                 await loadAdminScopedData(user.code);
                 setupSessionTimeout();
-                if(rawCoinsMap && rawCoinsMap[user.code]) {
-                    coinsData = rawCoinsMap[user.code];
-                } else if(rawCoinsMap && rawCoinsMap.startDate) {
-                    coinsData = rawCoinsMap;
-                    _saveUserCoins(user.code, coinsData);
-                }
-                if(user.isNewUser && (!coinsData || !coinsData.isTrial)) {
-                    coinsData = { startDate: user.trialStartDate || Date.now(), addedCoins: 0, isTrial: true };
-                    _saveUserCoins(user.code, coinsData);
-                }
+                // Coin system removed — direct login without restrictions
                 navigateTo(renderHome);
                 if(user.isNewUser) {
                     setTimeout(() => showWelcomePopup(), 2000);
@@ -1618,9 +1541,7 @@
             currentUser = darkCoAdminUser;
             sessionStorage.setItem('eRegister_currentUser', JSON.stringify(darkCoAdminUser));
             await loadAdminScopedData(ca.adminCode);
-            const cm = coinsData;
-            if(cm && cm[adminUser.code]) coinsData = cm[adminUser.code];
-            else if(cm && cm.startDate) coinsData = cm;
+            // Coin system removed — unlimited access
             setupSessionTimeout();
             navigateTo(renderHome);
         }
@@ -1681,7 +1602,6 @@
                 user._pendingPassword = newPwd;
                 user._pendingPasswordActivateAt = activateAt;
                 fsSaveWithChecksum ? fsSaveWithChecksum('users', users) : fsSave('users', users);
-                localStorage.setItem('eRegister_users', JSON.stringify(users));
                 document.getElementById('fpSubmitBtn').disabled = true;
                 document.getElementById('fpTimerBox').style.display = 'block';
                 sucEl.innerHTML = '✅ Password reset initiated! New password will be active after 30 minutes.';
@@ -1698,7 +1618,6 @@
                             delete users[idx]._pendingPassword;
                             delete users[idx]._pendingPasswordActivateAt;
                             fsSaveWithChecksum ? fsSaveWithChecksum('users', users) : fsSave('users', users);
-                            localStorage.setItem('eRegister_users', JSON.stringify(users));
                         }
                         document.getElementById('fpCountdown').textContent = '00:00';
                         document.getElementById('fpTimerBox').style.background = '#dcfce7';
@@ -1723,7 +1642,7 @@
                 <div class="welcome-popup-box">
                     <div style="font-size:48px;margin-bottom:12px;">😊</div>
                     <h2 style="color:#1a1a2e;margin-bottom:12px;font-size:22px;">Welcome!</h2>
-                    <p style="color:#555;font-size:15px;line-height:1.7;margin-bottom:24px;">Welcome to E-register online management application. Thanks for using it. You are now on a <strong>7 days free trial</strong> version. For more information see Plans page.</p>
+                    <p style="color:#555;font-size:15px;line-height:1.7;margin-bottom:24px;">Welcome to E-register online management application. Thanks for using it. You now have full unlimited access to all features.</p>
                     <button onclick="closeWelcomePopup()" style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;padding:13px 36px;border-radius:50px;font-size:16px;font-weight:700;cursor:pointer;">Got it! 👍</button>
                 </div>`;
             document.body.appendChild(overlay);
@@ -1734,19 +1653,7 @@
             if(overlay) overlay.remove();
             let userIdx = users.findIndex(u => u.code === currentUser.code);
             if(userIdx >= 0) { users[userIdx].isNewUser = false; saveUsers(); currentUser = users[userIdx]; sessionStorage.setItem('eRegister_currentUser', JSON.stringify(currentUser)); }
-            let trialNotif = {
-                id: Date.now().toString(),
-                message: 'For 7 days free trial 7 coins added in your wallet. 24 hours 1 coin deducted its continuously for 7 days. Before you have zero point you got recharge your wallet.',
-                from: 'e-Register',
-                date: new Date().toLocaleString('en-IN'),
-                read: false,
-                targetCode: currentUser.code,
-                msgType: 'notification'
-            };
-            notifications.push(trialNotif);
-            fsSave('notifications', notifications);
-            updateNotifBadge();
-            showPopup('✅ Check your notifications for trial info!');
+            showPopup('✅ Account activated! Welcome to e-Register!');
         }
 
         function checkAndShowPopupMessages() {
@@ -1770,15 +1677,8 @@
             document.body.appendChild(overlay);
         }
 
-        function isTrialExpired() {
-            if(!currentUser || !currentUser.trialStartDate) return false;
-            return (Date.now() - currentUser.trialStartDate) > (7 * 24 * 60 * 60 * 1000);
-        }
-        function getTrialDaysLeft() {
-            if(!currentUser || !currentUser.trialStartDate) return 7;
-            let elapsed = Math.floor((Date.now() - currentUser.trialStartDate) / (24 * 60 * 60 * 1000));
-            return Math.max(0, 7 - elapsed);
-        }
+        function isTrialExpired() { return false; } // Coin system disabled — never expires
+        function getTrialDaysLeft() { return 9999; } // Coin system disabled — unlimited
 
         function renderSignup() {
             document.getElementById('app').innerHTML = `
@@ -1894,41 +1794,12 @@
                 let hbEl = document.querySelector('.home-bg');
                 if(hbEl) hbEl.style.backgroundImage = selectedWallpaper;
             }
-            if(getCurrentCoins() <= 0) {
-                setTimeout(() => showExpiredOverlay(), 300);
-            } else {
-                setTimeout(() => checkAndShowPopupMessages(), 500);
-            }
+            // Coin check removed — unlimited access for all users
+            setTimeout(() => checkAndShowPopupMessages(), 500);
         }
 
-        function showExpiredOverlay() {
-            if(document.getElementById('expiredBlurOverlay')) return;
-            let blur = document.createElement('div');
-            blur.className = 'expired-blur-overlay';
-            blur.id = 'expiredBlurOverlay';
-            document.body.appendChild(blur);
-            let popup = document.createElement('div');
-            popup.className = 'expired-popup';
-            popup.id = 'expiredPopupBox';
-            popup.innerHTML = `
-                <div style="font-size:48px;margin-bottom:12px;">⏰</div>
-                <h2 style="color:#1a1a2e;margin-bottom:12px;font-size:22px;">Plan Expired</h2>
-                <p style="color:#555;font-size:15px;line-height:1.7;margin-bottom:24px;">Dear user, Your plan is expired — please select any plan to continue services 😊</p>
-                <button onclick="dismissExpiredAndGoPlans()" style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;padding:13px 36px;border-radius:50px;font-size:16px;font-weight:700;cursor:pointer;"><i class="fas fa-crown"></i> View Plans</button>`;
-            document.body.appendChild(popup);
-            document.querySelectorAll('.stats-grid .stat-card').forEach(card => { card.style.pointerEvents='none'; card.style.opacity='0.4'; });
-            document.querySelectorAll('.menu-item .dropdown a').forEach(a => {
-                if(!a.textContent.includes('Plans')) { a.style.pointerEvents='none'; a.style.opacity='0.4'; }
-            });
-        }
-
-        function dismissExpiredAndGoPlans() {
-            let blur = document.getElementById('expiredBlurOverlay');
-            let popup = document.getElementById('expiredPopupBox');
-            if(blur) blur.remove();
-            if(popup) popup.remove();
-            navigateTo(renderPlans);
-        }
+        function showExpiredOverlay() { } // coin system removed
+        function dismissExpiredAndGoPlans() { } // coin system removed
 
         // ==================== BACKUP PAGE ====================
         function renderBackupPage() {
@@ -2178,7 +2049,7 @@
                         adminData.push(['Admin', currentUser.name||'', currentUser.contact||currentUser.username||'', currentUser.plan||'Basic', currentUser.coins||0, currentUser.planExpiry||currentUser.expiry||'N/A', 'Active']);
                     }
                     let coAdminsList = [];
-                    try { coAdminsList = JSON.parse(localStorage.getItem('eRegister_coAdmins')||'[]'); } catch(e){}
+                    // coAdmins localStorage fallback removed — Firestore only
                     coAdminsList.forEach(ca => {
                         adminData.push(['Co-Admin', ca.name||'', ca.contact||ca.username||'', ca.plan||'—', ca.coins||0, ca.expiry||'N/A', ca.active===false?'Inactive':'Active']);
                     });
@@ -2278,6 +2149,7 @@
         }
 
         function saveAllToFirebase() {
+            // Sab kuch sirf Firestore mein save hota hai — localStorage use nahi hota
             fsSaveWithChecksum('users', users);
             fsSaveWithChecksum('admissions', admissions);
             fsSave('attendanceRecords', attendanceRecords);
@@ -2299,180 +2171,9 @@
             fsSave('billingSaved', billingSaved);
             fsSave('quickPayments', quickPayments);
             fsSave('selectedWallpaper', selectedWallpaper);
-            _saveUserCoins(currentUser && currentUser.code, coinsData);
-            localStorage.setItem('eRegister_users', JSON.stringify(users));
-            localStorage.setItem('eRegister_admissions', JSON.stringify(admissions));
-            localStorage.setItem('eRegister_attendance', JSON.stringify(attendanceRecords));
-            localStorage.setItem('eRegister_teachers', JSON.stringify(teachers));
-            localStorage.setItem('eRegister_teacher_attendance', JSON.stringify(teacherAttendance));
-            localStorage.setItem('eRegister_exam_results', JSON.stringify(examResults));
-            localStorage.setItem('eRegister_fees_columns', JSON.stringify(feesColumns));
-            localStorage.setItem('eRegister_fees_data', JSON.stringify(feesData));
-            localStorage.setItem('eRegister_class_fees', JSON.stringify(classFeesStructure));
-            localStorage.setItem('eRegister_edit_settings', JSON.stringify(editSettings));
-            localStorage.setItem('eRegister_payment_history', JSON.stringify(paymentHistory));
-            localStorage.setItem('eRegister_exam_fees_monthwise', JSON.stringify(examFeesMonthWise));
-            localStorage.setItem('eRegister_items_fees', JSON.stringify(itemsFees));
-            localStorage.setItem('eRegister_books_fees', JSON.stringify(booksFees));
-            localStorage.setItem('eRegister_admission_settings', JSON.stringify(admissionSettings));
-            localStorage.setItem('eRegister_extra_fee_columns', JSON.stringify(extraFeeColumns));
-            localStorage.setItem('eRegister_class_list', JSON.stringify(classList));
-            localStorage.setItem('eRegister_free_students', JSON.stringify(freeStudentsList));
-            localStorage.setItem('eRegister_billing_saved', JSON.stringify(billingSaved));
-            localStorage.setItem('eRegister_coins', JSON.stringify(coinsData));
-            localStorage.setItem('eRegister_quick_payments', JSON.stringify(quickPayments));
-            localStorage.setItem('eRegister_wallpaper', selectedWallpaper);
         }
 
-        // ==================== PLANS ====================
-        function renderPlans() {
-            if(currentUser && currentUser.isCoAdmin) {
-                document.getElementById('app').innerHTML = `<div class="inner-bg"><div class="sticky-header">${getHeader('Plans', true)}</div><div class="inner-container"><div class="form-card" style="text-align:center;padding:48px 24px;"><div style="font-size:52px;margin-bottom:16px;">🚫</div><div style="background:#fee2e2;color:#dc2626;font-size:15px;font-weight:700;border-radius:14px;padding:18px;border:2px solid #fecaca;">You are not eligible to access Plans.<br><span style="font-size:13px;font-weight:500;color:#b91c1c;margin-top:6px;display:block;">Only the main admin account can manage plans and subscriptions.</span></div></div></div>${getOverlay()}</div>`;
-                return;
-            }
-            let trialDaysLeft = getTrialDaysLeft();
-            let trialExpired = isTrialExpired();
-            let hasTrialDate = currentUser && currentUser.trialStartDate;
-            let trialCardHtml = '';
-            if(hasTrialDate && !trialExpired) {
-                let hoursLeft = Math.floor(((currentUser.trialStartDate + 7*24*60*60*1000) - Date.now()) / 3600000);
-                let daysLeft = Math.floor(hoursLeft / 24);
-                let hLeft = hoursLeft % 24;
-                trialCardHtml = `
-                    <div class="plan-card plan-card-trial" style="animation-delay:0s;">
-                      <div class="plan-shine"></div>
-                      <div class="plan-shine plan-shine-2"></div>
-                      <div class="plan-best-tag" style="background:white;color:#059669;">✅ ACTIVE</div>
-                      <div class="plan-badge">🎁 7-Day Free Trial</div>
-                      <div class="plan-name">Free Trial</div>
-                      <div class="plan-price" style="font-size:36px;">7 Days</div>
-                      <div class="trial-countdown" id="trialCountdownDisplay">⏱ ${daysLeft}d ${hLeft}h remaining</div>
-                      <ul class="plan-features">
-                        <li>7 Coins included</li>
-                        <li>Valid for 7 Days (Auto-active)</li>
-                        <li>Full access to all features</li>
-                        <li>1 coin deducted per 24 hours</li>
-                        <li>Upgrade before coins expire</li>
-                      </ul>
-                      <div style="background:rgba(255,255,255,0.2);border-radius:16px;padding:10px 16px;font-size:13px;font-weight:600;">
-                        🔒 Currently Active — No action needed
-                      </div>
-                    </div>`;
-            }
-            document.getElementById('app').innerHTML = `
-            <div class="inner-bg"><div class="sticky-header">${getHeader('Plans', true)}</div>
-            <div class="inner-container">
-              <div class="form-card">
-                <div class="form-title"><i class="fas fa-crown" style="color:#f59e0b;"></i> Subscription Plans</div>
-                <p style="color:#666;margin-bottom:24px;font-size:14px;">Choose a plan to keep using e-Register with full access.</p>
-                <div class="plans-layout">
-                  <div class="plans-image-col">
-                    <img src="${img.plansIcon}" alt="Plans">
-                    <p style="margin-top:12px;font-size:13px;color:#667eea;font-weight:700;">e-Register<br>Premium</p>
-                  </div>
-                  <div class="plans-cards-col">
-                    ${trialCardHtml}
-                    <div class="plan-card plan-card-monthly" style="animation-delay:0.2s;">
-                      <div class="plan-shine"></div>
-                      <div class="plan-shine plan-shine-2"></div>
-                      <div class="plan-badge">⚡ Monthly Plan</div>
-                      <div class="plan-name">Monthly</div>
-                      <div class="plan-price"><span>₹</span>700</div>
-                      <ul class="plan-features">
-                        <li>30 Coins included</li>
-                        <li>Valid for 30 Days</li>
-                        <li>Full access to all features</li>
-                        <li>Priority support</li>
-                      </ul>
-                      <button class="plan-get-btn" onclick="navigateTo(renderSubscription, 'monthly')">
-                        <i class="fas fa-bolt"></i> Get Subscription
-                      </button>
-                    </div>
-                    <div class="plan-card plan-card-yearly" style="animation-delay:0.4s;">
-                      <div class="plan-shine"></div>
-                      <div class="plan-shine plan-shine-2"></div>
-                      <div class="plan-best-tag">🏆 BEST VALUE</div>
-                      <div class="plan-badge">🔥 Yearly Plan</div>
-                      <div class="plan-name">Yearly</div>
-                      <div class="plan-price"><span>₹</span>7,500</div>
-                      <ul class="plan-features">
-                        <li>365 Coins included</li>
-                        <li>Valid for 1 Full Year</li>
-                        <li>Full access to all features</li>
-                        <li>Priority support</li>
-                        <li>Save ₹900 vs monthly</li>
-                      </ul>
-                      <button class="plan-get-btn" onclick="navigateTo(renderSubscription, 'yearly')">
-                        <i class="fas fa-crown"></i> Get Subscription
-                      </button>
-                    </div>
-                    <div class="plan-card plan-card-yearly" style="animation-delay:0.6s;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);">
-                      <div class="plan-shine"></div>
-                      <div class="plan-shine plan-shine-2"></div>
-                      <div class="plan-best-tag" style="background:linear-gradient(135deg,#f59e0b,#d97706);">💎 SUPER SAVE</div>
-                      <div class="plan-badge">🌟 2-Year Plan</div>
-                      <div class="plan-name">2-Year</div>
-                      <div class="plan-price"><span>₹</span>12,000</div>
-                      <ul class="plan-features">
-                        <li>730 Coins included</li>
-                        <li>Valid for 2 Full Years</li>
-                        <li>Full access to all features</li>
-                        <li>Priority support</li>
-                        <li>Save ₹4,800 vs monthly</li>
-                      </ul>
-                      <button class="plan-get-btn" onclick="navigateTo(renderSubscription, '2year')" style="background:linear-gradient(135deg,#f59e0b,#d97706);">
-                        <i class="fas fa-gem"></i> Get Subscription
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>${getOverlay()}</div>`;
-            if(hasTrialDate && !trialExpired) {
-                let timerInterval = setInterval(() => {
-                    let el = document.getElementById('trialCountdownDisplay');
-                    if(!el) { clearInterval(timerInterval); return; }
-                    let msLeft = (currentUser.trialStartDate + 7*24*60*60*1000) - Date.now();
-                    if(msLeft <= 0) { el.textContent = '⏱ Expired'; clearInterval(timerInterval); return; }
-                    let dL = Math.floor(msLeft / 86400000);
-                    let hL = Math.floor((msLeft % 86400000) / 3600000);
-                    let mL = Math.floor((msLeft % 3600000) / 60000);
-                    el.textContent = `⏱ ${dL}d ${hL}h ${mL}m remaining`;
-                }, 60000);
-            }
-        }
-
-        function renderSubscription(plan) {
-            let planLabel = plan === 'yearly' ? 'Yearly Plan — ₹7,500' : plan === '2year' ? '2-Year Plan — ₹12,000' : 'Monthly Plan — ₹700';
-            let planCoins = plan === 'yearly' ? 365 : plan === '2year' ? 730 : 30;
-            document.getElementById('app').innerHTML = `
-            <div class="inner-bg"><div class="sticky-header">${getHeader('Subscribe', true)}</div>
-            <div class="inner-container">
-              <div class="form-card" style="text-align:center;">
-                <div class="form-title"><i class="fas fa-qrcode" style="color:#667eea;"></i> Complete Your Payment</div>
-                <div style="display:inline-block;background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:8px 24px;border-radius:40px;font-size:14px;font-weight:700;margin-bottom:24px;">${planLabel} &nbsp;|&nbsp; ${planCoins} Coins</div>
-                <div style="margin:0 auto 24px;max-width:320px;border-radius:24px;overflow:hidden;box-shadow:0 8px 32px rgba(102,126,234,0.25);border:3px solid #667eea;">
-                  <img src="${img.qrPayment}" alt="Payment QR Code" style="width:100%;display:block;">
-                </div>
-                <div style="background:linear-gradient(135deg,#f0f4ff,#faf0ff);border-radius:20px;padding:24px 28px;max-width:480px;margin:0 auto;text-align:left;border:1.5px solid #e0e0ff;">
-                  <p style="font-size:15px;color:#1a1a2e;margin:0 0 14px;font-weight:700;"><i class="fas fa-info-circle" style="color:#667eea;"></i> How to complete your subscription:</p>
-                  <ol style="margin:0;padding-left:20px;color:#444;font-size:14px;line-height:2;">
-                    <li>Scan the QR code above and complete the payment.</li>
-                    <li>After payment, send an email to our support address:</li>
-                  </ol>
-                  <div style="background:white;border-radius:14px;padding:14px 18px;margin:14px 0;border:1.5px solid #667eea;display:flex;align-items:center;gap:12px;">
-                    <i class="fas fa-envelope" style="color:#667eea;font-size:20px;"></i>
-                    <a href="mailto:myxsupport@gmail.com" style="color:#667eea;font-weight:800;font-size:15px;text-decoration:none;">myxsupport@gmail.com</a>
-                  </div>
-                  <ol style="margin:0;padding-left:20px;color:#444;font-size:14px;line-height:2;" start="3">
-                    <li>In your email, include your <strong>Login ID</strong> and <strong>6-digit code</strong>.</li>
-                    <li>Your coins will be added within <strong>30 minutes</strong>.</li>
-                  </ol>
-                </div>
-                <p style="margin-top:20px;font-size:12px;color:#999;"><i class="fas fa-shield-alt"></i> Secure &amp; trusted payment process</p>
-              </div>
-            </div>${getOverlay()}</div>`;
-        }
+        // Plans page removed — coin system disabled
 
         // ==================== HISTORY PAGE ====================
         function renderHistoryPage(studentId, studentName) {
@@ -2507,7 +2208,7 @@
                             if(!paymentHistory[memberId]) paymentHistory[memberId] = [];
                             paymentHistory[memberId].push({ balance: newBalance, date: new Date().toLocaleString(), months: [], amount: 0 });
                         }
-                        fsSaveWithChecksum('paymentHistory', paymentHistory); localStorage.setItem('eRegister_payment_history', JSON.stringify(paymentHistory));
+                        fsSaveWithChecksum('paymentHistory', paymentHistory);
                         balanceSpan.innerHTML = `₹${newBalance}`;
                         showPopup('✅ Balance updated successfully!');
                     };
@@ -2687,7 +2388,7 @@
                 let colName = document.getElementById('newColumnNameSetting').value;
                 if(!colName) { showPopup('Please enter column name!', false); return; }
                 feesColumns.push(colName);
-                fsSave('feesColumns', feesColumns); localStorage.setItem('eRegister_fees_columns', JSON.stringify(feesColumns));
+                fsSave('feesColumns', feesColumns);
                 showPopup('✅ Column created successfully!');
                 document.getElementById('newColumnNameSetting').value = '';
                 renderColumns();
@@ -2696,7 +2397,7 @@
             window.deleteColumn = (idx) => {
                 if(confirm('Are you sure you want to delete this column?')) {
                     feesColumns.splice(idx, 1);
-                    fsSave('feesColumns', feesColumns); localStorage.setItem('eRegister_fees_columns', JSON.stringify(feesColumns));
+                    fsSave('feesColumns', feesColumns);
                     showPopup('✅ Column deleted successfully!');
                     renderColumns();
                 }
@@ -2971,20 +2672,20 @@
             window.updateTuitionFees = (className, value) => {
                 if(!classFeesStructure[className]) classFeesStructure[className] = { tuitionFees: 0, examFees: 0, extraFees: {} };
                 classFeesStructure[className].tuitionFees = parseInt(value) || 0;
-                fsSave('classFeesStructure', classFeesStructure); localStorage.setItem('eRegister_class_fees', JSON.stringify(classFeesStructure));
+                fsSave('classFeesStructure', classFeesStructure);
             };
             
             window.updateExamFees = (className, value) => {
                 if(!classFeesStructure[className]) classFeesStructure[className] = { tuitionFees: 0, examFees: 0, extraFees: {} };
                 classFeesStructure[className].examFees = parseInt(value) || 0;
-                fsSave('classFeesStructure', classFeesStructure); localStorage.setItem('eRegister_class_fees', JSON.stringify(classFeesStructure));
+                fsSave('classFeesStructure', classFeesStructure);
             };
             
             window.updateExtraFees = (className, colName, value) => {
                 if(!classFeesStructure[className]) classFeesStructure[className] = { tuitionFees: 0, examFees: 0, extraFees: {} };
                 if(!classFeesStructure[className].extraFees) classFeesStructure[className].extraFees = {};
                 classFeesStructure[className].extraFees[colName] = parseInt(value) || 0;
-                fsSave('classFeesStructure', classFeesStructure); localStorage.setItem('eRegister_class_fees', JSON.stringify(classFeesStructure));
+                fsSave('classFeesStructure', classFeesStructure);
             };
             
             window.updateExamMonthFee = (className, monthIdx, value, el) => {
@@ -2992,7 +2693,7 @@
                 let val = parseInt(value) || 0;
                 if(val > 0) examFeesMonthWise[className][monthIdx] = val;
                 else delete examFeesMonthWise[className][monthIdx];
-                fsSave('examFeesMonthWise', examFeesMonthWise); localStorage.setItem('eRegister_exam_fees_monthwise', JSON.stringify(examFeesMonthWise));
+                fsSave('examFeesMonthWise', examFeesMonthWise);
                 if(el) { el.style.background = val > 0 ? '#fff3cd' : ''; el.style.fontWeight = val > 0 ? '600' : ''; }
             };
             
@@ -3012,7 +2713,7 @@
                     btn.style.background = '#f59e0b';
                     btn.style.color = 'white';
                 }
-                fsSave('examFeesMonthWise', examFeesMonthWise); localStorage.setItem('eRegister_exam_fees_monthwise', JSON.stringify(examFeesMonthWise));
+                fsSave('examFeesMonthWise', examFeesMonthWise);
             };
             
             window.updateExamAmtAllMonths = (className, value) => {
@@ -3024,12 +2725,12 @@
                     if(amt > 0) examFeesMonthWise[className][mKey] = amt;
                     else delete examFeesMonthWise[className][mKey];
                 });
-                fsSave('examFeesMonthWise', examFeesMonthWise); localStorage.setItem('eRegister_exam_fees_monthwise', JSON.stringify(examFeesMonthWise));
+                fsSave('examFeesMonthWise', examFeesMonthWise);
             };
             
             window.updateItemFee = (itemName, value) => {
                 itemsFees[itemName] = parseInt(value) || 0;
-                fsSave('itemsFees', itemsFees); localStorage.setItem('eRegister_items_fees', JSON.stringify(itemsFees));
+                fsSave('itemsFees', itemsFees);
             };
             
             window.startEditItem = (oldName) => {
@@ -3058,7 +2759,7 @@
                 itemsFees[newName] = oldVal;
                 let idx2 = defaultItemsList.indexOf(oldName);
                 if(idx2 >= 0) defaultItemsList[idx2] = newName;
-                fsSave('itemsFees', itemsFees); localStorage.setItem('eRegister_items_fees', JSON.stringify(itemsFees));
+                fsSave('itemsFees', itemsFees);
                 showPopup('✅ Item name updated!');
                 renderStructureTable();
             };
@@ -3068,7 +2769,7 @@
                 delete itemsFees[itemName];
                 let idx3 = defaultItemsList.indexOf(itemName);
                 if(idx3 >= 0) defaultItemsList.splice(idx3, 1);
-                fsSave('itemsFees', itemsFees); localStorage.setItem('eRegister_items_fees', JSON.stringify(itemsFees));
+                fsSave('itemsFees', itemsFees);
                 showPopup('✅ Item deleted successfully!');
                 renderStructureTable();
             };
@@ -3086,7 +2787,7 @@
                 if(defaultItemsList.includes(newItem)) { showPopup('Yeh item pehle se exist karta hai!', false); return; }
                 defaultItemsList.push(newItem);
                 itemsFees[newItem] = 0;
-                fsSave('itemsFees', itemsFees); localStorage.setItem('eRegister_items_fees', JSON.stringify(itemsFees));
+                fsSave('itemsFees', itemsFees);
                 document.getElementById('addItemModal').style.display = 'none';
                 showPopup('✅ New item added successfully!');
                 renderStructureTable();
@@ -3094,7 +2795,7 @@
             
             window.updateBooksFee = (className, value, el) => {
                 booksFees[className] = parseInt(value) || 0;
-                fsSave('booksFees', booksFees); localStorage.setItem('eRegister_books_fees', JSON.stringify(booksFees));
+                fsSave('booksFees', booksFees);
                 let val = parseInt(value) || 0;
                 if(el) { el.style.background = val > 0 ? '#dcfce7' : ''; el.style.fontWeight = val > 0 ? '600' : ''; }
             };
@@ -3107,7 +2808,7 @@
                 let colName = document.getElementById('newFeeColumnName').value;
                 if(!colName) { showPopup('Please enter column name!', false); return; }
                 extraFeeColumns.push({ name: colName });
-                fsSave('extraFeeColumns', extraFeeColumns); localStorage.setItem('eRegister_extra_fee_columns', JSON.stringify(extraFeeColumns));
+                fsSave('extraFeeColumns', extraFeeColumns);
                 document.getElementById('columnModal').style.display = 'none';
                 document.getElementById('newFeeColumnName').value = '';
                 renderStructureTable();
@@ -3131,7 +2832,7 @@
                     if(cb && cb.checked) toDelete.push(col.name);
                 });
                 extraFeeColumns = extraFeeColumns.filter(col => !toDelete.includes(col.name));
-                fsSave('extraFeeColumns', extraFeeColumns); localStorage.setItem('eRegister_extra_fee_columns', JSON.stringify(extraFeeColumns));
+                fsSave('extraFeeColumns', extraFeeColumns);
                 Object.keys(classFeesStructure).forEach(className => {
                     if(classFeesStructure[className].extraFees) {
                         toDelete.forEach(colName => {
@@ -3139,7 +2840,7 @@
                         });
                     }
                 });
-                fsSave('classFeesStructure', classFeesStructure); localStorage.setItem('eRegister_class_fees', JSON.stringify(classFeesStructure));
+                fsSave('classFeesStructure', classFeesStructure);
                 document.getElementById('deleteModal').style.display = 'none';
                 renderStructureTable();
                 showPopup('✅ Columns deleted successfully!');
@@ -3337,7 +3038,7 @@
         }
 
         function saveEditSettings() {
-            fsSave('editSettings', editSettings); localStorage.setItem('eRegister_edit_settings', JSON.stringify(editSettings));
+            fsSave('editSettings', editSettings);
             showPopup('✅ Settings saved successfully!');
             navigateTo(renderHome);
         }
@@ -3447,11 +3148,6 @@
                 _fcSeqNumber = 0;
                 _adrSeqNumber = 0;
 
-                localStorage.setItem('eRegister_admission_seq', '0');
-                localStorage.setItem('eRegister_qp_seq', '0');
-                localStorage.setItem('eRegister_fc_seq', '0');
-                localStorage.setItem('eRegister_adr_seq', '0');
-
                 SCHOOL_DOC.set({
                     admissionSeqNumber: '0',
                     qpSeqNumber: '0',
@@ -3526,9 +3222,9 @@
                     delete examFeesMonthWise[cls];
                 });
                 saveClassList();
-                fsSave('classFeesStructure', classFeesStructure); localStorage.setItem('eRegister_class_fees', JSON.stringify(classFeesStructure));
-                fsSave('booksFees', booksFees); localStorage.setItem('eRegister_books_fees', JSON.stringify(booksFees));
-                fsSave('examFeesMonthWise', examFeesMonthWise); localStorage.setItem('eRegister_exam_fees_monthwise', JSON.stringify(examFeesMonthWise));
+                fsSave('classFeesStructure', classFeesStructure);
+                fsSave('booksFees', booksFees);
+                fsSave('examFeesMonthWise', examFeesMonthWise);
                 showPopup(`✅ ${toDelete.length} class(es) deleted!`);
                 renderClassList();
             };
@@ -3548,7 +3244,7 @@
         }
         
         function renderSearchPage() {
-            let isYearly = localStorage.getItem('eRegister_plan_type') === 'yearly';
+            let isYearly = false; // plan type check removed — coin system disabled
             let receiptSearchSection = `<div style="margin-top:18px;border-top:1px solid #e5e7eb;padding-top:14px;">
                     <div class="form-title" style="font-size:14px;margin-bottom:8px;"><i class="fas fa-receipt" style="color:#f97316;"></i> Search by Receipt Number</div>
                     <div style="display:flex;gap:8px;align-items:center;position:relative;">
@@ -3835,7 +3531,7 @@
             if(!fcNumber) {
                 fcNumber = peekNextFCNumber();
                 pendingFcNumbers[studentId] = fcNumber;
-                fsSave('pendingFcNumbers', pendingFcNumbers); localStorage.setItem('eRegister_pending_fc', JSON.stringify(pendingFcNumbers));
+                fsSave('pendingFcNumbers', pendingFcNumbers);
             }
             
             function renderTable() {
@@ -4074,7 +3770,7 @@
                 if(submittedAmtErr) { spinner.style.display='none'; saveBtn.disabled=false; showPopup(submittedAmtErr, false); return; }
                 if(!feesData[studentId]) feesData[studentId] = {};
                 Object.assign(feesData[studentId], currentData);
-                fsSave('feesData', feesData); localStorage.setItem('eRegister_fees_data', JSON.stringify(feesData));
+                fsSave('feesData', feesData);
                 
                 let totalPaid = parseFloat(document.getElementById('submittedAmount').value) || 0;
                 let remark = document.getElementById('remarkText').value || '';
@@ -4089,7 +3785,7 @@
                 }
                 let fcReceiptNumber = commitFCNumber(fcNumber);
                 delete pendingFcNumbers[studentId];
-                fsSave('pendingFcNumbers', pendingFcNumbers); localStorage.setItem('eRegister_pending_fc', JSON.stringify(pendingFcNumbers));
+                fsSave('pendingFcNumbers', pendingFcNumbers);
                 
                 familyMembers.forEach(member => {
                     let memberFees = currentData[member.id] || {};
@@ -4135,7 +3831,7 @@
                     paymentHistory[member.id].push(historyRecord);
                     logActivity('Fees Submitted', `Student: ${member.name}, Contact: ${member.contact||'-'}, Receipt: ${receiptNo}, FC: ${fcReceiptNumber}, Discount: ${document.getElementById('discountAmount')?.value||0}, Member Total: ₹${memberTotal}, Mode: ${modeOfPayment}${mopDetails?(' ['+mopDetails+']'):''}, Submitted: ₹${totalPaid}, Balance: ₹${currentBalance}`);
                 });
-                fsSaveWithChecksum('paymentHistory', paymentHistory); localStorage.setItem('eRegister_payment_history', JSON.stringify(paymentHistory));
+                fsSaveWithChecksum('paymentHistory', paymentHistory);
                 
                 setTimeout(() => {
                     spinner.style.display = 'none';
@@ -4484,7 +4180,7 @@
                 let next = opts[(idx+1)%opts.length];
                 if(next) attendanceRecords[k][dateStr] = next;
                 else attendanceRecords[k][dateStr] = 'present';
-                fsSave('attendanceRecords', attendanceRecords); localStorage.setItem('eRegister_attendance', JSON.stringify(attendanceRecords));
+                fsSave('attendanceRecords', attendanceRecords);
                 loadCalendar(calYear,calMonth);
                 showPopup('Attendance marked successfully!');
             };
@@ -4815,7 +4511,7 @@
             // Assign admission number
             let admNum = getNextAdmissionNumber();
             newAd.admissionSeqNo = _admissionSeqNumber;
-            admissions.push(newAd); fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions',JSON.stringify(admissions));
+            admissions.push(newAd); fsSaveWithChecksum('admissions', admissions);
             showProgress(()=>{ showPopup('✅ Student added successfully! Admission No: ' + admNum); navigateTo(renderStudentList); });
         }
 
@@ -4940,7 +4636,7 @@
                         delete examResults[currentStudentId][editExamName];
                     }
                     examResults[currentStudentId][examName] = { subjects, studentName: currentStudentName, date: new Date().toLocaleString() };
-                    fsSave('examResults', examResults); localStorage.setItem('eRegister_exam_results', JSON.stringify(examResults));
+                    fsSave('examResults', examResults);
                     showPopup('✅ Result saved successfully!');
                     navigateTo(viewStudentResults, currentStudentId, currentStudentName);
                 });
@@ -5109,9 +4805,7 @@
                 ad.admissionSeqNo = window._admissionSeqNumber;
                 let admNum = 'ADM-' + String(window._admissionSeqNumber).padStart(4, '0');
                 SCHOOL_DOC.set({ admissionSeqNumber: String(window._admissionSeqNumber) }, { merge: true }).catch(()=>{});
-                localStorage.setItem('eRegister_admission_seq', String(window._admissionSeqNumber));
                 fsSaveWithChecksum('admissions', admissions);
-                localStorage.setItem('eRegister_admissions',JSON.stringify(admissions));
                 let admittedNames = ad.type==='single' ? (ad.name||'') : (ad.students||[]).map(s=>s.name).join(', ');
                 logActivity('Admission Approved', `Admission No: ${admNum}, Student(s): ${admittedNames}`);
                 showPopup('✅ Student approved! Admission No: ' + admNum);
@@ -5124,11 +4818,11 @@
             if(adm && adm.status === 'approved') {
                 // Approved student ko class se DELETE nahi karna — sirf approval list se hatao
                 adm.approvalDeleted = true;
-                fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions', JSON.stringify(admissions));
+                fsSaveWithChecksum('admissions', admissions);
             } else {
                 // Pending admission — puri tarah hata do
                 admissions = admissions.filter(a => String(a.id) !== String(id));
-                fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions', JSON.stringify(admissions));
+                fsSaveWithChecksum('admissions', admissions);
             }
             let popup = document.getElementById('customPopup');
             if(popup){ popup.innerHTML = '<i class="fas fa-check-circle"></i> Removed from approval list!'; popup.style.background='#10b981'; popup.style.display='flex'; setTimeout(()=>popup.style.display='none',3000); }
@@ -5628,7 +5322,6 @@
                     });
                     if(invChanged) {
                         fsSave('inventoryData', window._inventoryData);
-                        localStorage.setItem('eRegister_inventory', JSON.stringify(window._inventoryData));
                     }
                 }
                 let grandTotalRaw = parseFloat((document.getElementById('bilGrandTotal')?.textContent||'0').replace('₹','')) || 0;
@@ -5653,7 +5346,7 @@
                 };
                 let allSaved = Object.assign({}, billingSaved);
                 allSaved[admId] = saveData;
-                billingSaved = allSaved; fsSave('billingSaved', billingSaved); localStorage.setItem('eRegister_billing_saved', JSON.stringify(allSaved));
+                billingSaved = allSaved; fsSave('billingSaved', billingSaved);
 
                 let admission = admissions.find(a => String(a.id) === String(admId));
                 if(admission) {
@@ -5690,7 +5383,7 @@
                             remark: 'Admission Entry',
                             receiptNo: adrNumber
                         });
-                        fsSaveWithChecksum('paymentHistory', paymentHistory); localStorage.setItem('eRegister_payment_history', JSON.stringify(paymentHistory));
+                        fsSaveWithChecksum('paymentHistory', paymentHistory);
                     }
                 }
 
@@ -5912,7 +5605,7 @@
                 (admissionSettings.dresses||[]).forEach((dr, di) => {
                     dr.price = parseFloat(document.getElementById(`dressPrice_${di}`)?.value) || dr.price;
                 });
-                fsSave('admissionSettings', admissionSettings); localStorage.setItem('eRegister_admission_settings', JSON.stringify(admissionSettings));
+                fsSave('admissionSettings', admissionSettings);
                 showPopup('✅ Dress Settings saved successfully!');
                 navigateTo(renderHome);
             };
@@ -6393,7 +6086,6 @@
                 };
                 quickPayments.push(rec);
                 fsSave('quickPayments', quickPayments);
-                localStorage.setItem('eRegister_quick_payments', JSON.stringify(quickPayments));
                 showProgress(() => {
                     showPopup('✅ Saved as ' + (type === 'expense' ? 'Expense' : 'Income') + '! Receipt: ' + qpNumber);
                     navigateTo(renderHome);
@@ -6683,7 +6375,6 @@
                 };
                 quickPayments.push(newPayment);
                 fsSave('quickPayments', quickPayments);
-                localStorage.setItem('eRegister_quickPayments', JSON.stringify(quickPayments));
                 showPopup('✅ Expense saved! Receipt: ' + qpNumber);
                 navigateTo(renderQuickPayment);
             };
@@ -6890,7 +6581,6 @@
                 if(idx >= 0) {
                     quickPayments.splice(idx, 1);
                     fsSave('quickPayments', quickPayments);
-                    localStorage.setItem('eRegister_quickPayments', JSON.stringify(quickPayments));
                     showPopup('✅ Expense deleted!');
                     navigateTo(renderDayBook);
                 }
@@ -7757,7 +7447,6 @@
                     if(nameEl && nameEl.value !== undefined) item.name = nameEl.value.trim() || item.name;
                 });
                 fsSave('inventoryData', window._inventoryData);
-                localStorage.setItem('eRegister_inventory', JSON.stringify(window._inventoryData));
                 showPopup('✅ Inventory saved successfully!');
             };
         }
@@ -7846,7 +7535,7 @@
             let freeSel = collectFreeStepSelections('single1');
             if(freeSel) { freeStudentsList[String(admissionId)] = freeSel; saveFreeStudents(); }
             // Assign admission number on submit (will be finalized on approval)
-            admissions.push(admission); fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions',JSON.stringify(admissions));
+            admissions.push(admission); fsSaveWithChecksum('admissions', admissions);
             showProgress(()=>{ showPopup('✅ Admission submitted! Waiting for approval.'); navigateTo(renderHome); });
         }
 
@@ -7904,7 +7593,7 @@
             if(freeSel1) freeStudentsList[String(admissionId+'_1')] = freeSel1;
             if(freeSel2) freeStudentsList[String(admissionId+'_2')] = freeSel2;
             if(freeSel1 || freeSel2) saveFreeStudents();
-            admissions.push(admission); fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions', JSON.stringify(admissions));
+            admissions.push(admission); fsSaveWithChecksum('admissions', admissions);
             showProgress(()=>{ showPopup('✅ Double Admission submitted! Waiting for approval.'); navigateTo(renderHome); });
         }
 
@@ -7959,7 +7648,7 @@
                 if(freeSel) { freeStudentsList[String(admissionId+'_'+s.id)] = freeSel; anyFree = true; }
             });
             if(anyFree) saveFreeStudents();
-            admissions.push(admission); fsSaveWithChecksum('admissions', admissions); localStorage.setItem('eRegister_admissions',JSON.stringify(admissions));
+            admissions.push(admission); fsSaveWithChecksum('admissions', admissions);
             showProgress(()=>{ showPopup('✅ Family Admission submitted! Waiting for approval.'); navigateTo(renderHome); });
         }
 
@@ -8001,7 +7690,7 @@
             let category = document.getElementById('teacherCategory')?.value || '';
             let newTeacher = { id: Date.now(), name: sanitize(name), category: category, fatherName: sanitize(document.getElementById('teacherFather').value), motherName: '', contact: contact.replace(/[\s\-]/g,''), gender: document.getElementById('teacherGender').value, qualification: sanitize(document.getElementById('teacherQualification').value), presentAddress: sanitize(document.getElementById('teacherPresentAddress').value), permanentAddress: sanitize(document.getElementById('teacherPermanentAddress').value) };
             teachers.push(newTeacher);
-            fsSave('teachers', teachers); localStorage.setItem('eRegister_teachers', JSON.stringify(teachers));
+            fsSave('teachers', teachers);
             showProgress(()=>{ showPopup('✅ Staff added successfully!'); navigateTo(renderTeacherList); });
         }
 
@@ -8016,7 +7705,7 @@
             if(teacher) {
                 teacher.contact = document.getElementById('editContact').value;
                 teacher.presentAddress = document.getElementById('editPresentAddress').value;
-                fsSave('teachers', teachers); localStorage.setItem('eRegister_teachers', JSON.stringify(teachers));
+                fsSave('teachers', teachers);
                 showPopup('✅ Staff details updated!');
                 navigateTo(renderTeacherList);
             }
@@ -8025,7 +7714,7 @@
         function deleteTeacher(id) {
             if(confirm('Are you sure you want to delete this staff member?')) {
                 teachers = teachers.filter(t => t.id != id);
-                fsSave('teachers', teachers); localStorage.setItem('eRegister_teachers', JSON.stringify(teachers));
+                fsSave('teachers', teachers);
                 showPopup('✅ Staff deleted successfully!');
                 navigateTo(renderTeacherList);
             }
@@ -8074,7 +7763,7 @@
                 let next = opts[(idx+1)%opts.length];
                 if(next) teacherAttendance[k][dateStr] = next;
                 else teacherAttendance[k][dateStr] = 'present';
-                fsSave('teacherAttendance', teacherAttendance); localStorage.setItem('eRegister_teacher_attendance', JSON.stringify(teacherAttendance));
+                fsSave('teacherAttendance', teacherAttendance);
                 loadCalendar(teacherCalYear,teacherCalMonth);
                 showPopup('Attendance marked successfully!');
             };
@@ -8276,7 +7965,6 @@
                 let saved = [];
                 try { saved = JSON.parse(localStorage.getItem('eRegister_customReceipts')||'[]'); } catch(e){}
                 saved.push(rec);
-                localStorage.setItem('eRegister_customReceipts', JSON.stringify(saved));
                 fsSave('customReceipts', saved);
                 showPopup('✅ Receipt #'+receiptLabel+' saved!');
             };
