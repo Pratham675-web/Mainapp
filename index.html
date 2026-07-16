@@ -2428,24 +2428,18 @@
             
             let isYellow = (m) => m.isFree === true;
             let primaryMember = familyMembers.find(m => !isYellow(m)) || familyMembers[0];
-            let primaryHistory = paymentHistory[primaryMember?.id] || [];
+            // computeStudentDefaulterInfo se sahi outstanding balance nikalo —
+            // ismein billing balance (admission entry) + pending monthly fees dono shamil hain.
+            // Sirf last payment history entry ka balance use karne se monthly fees miss hoti thi.
+            let _histNow = new Date();
+            let _histNowMonth = _histNow.getMonth();
+            let _histNowYear = _histNow.getFullYear();
+            let _histAllMonths = ['January','February','March','April','May','June','July','August','September','October','November','December'];
             let lastBalance = 0;
-            if(primaryHistory.length > 0) {
-                if(familyMembers.length > 1) {
-                    // Family ke liye: sabhi members ke last balance sum karo (combined outstanding)
-                    let _famCombBal = 0;
-                    familyMembers.forEach(mem => {
-                        let _mh2 = paymentHistory[mem.id] || [];
-                        if(_mh2.length > 0) _famCombBal += (_mh2[_mh2.length - 1].balance || 0);
-                    });
-                    lastBalance = _famCombBal;
-                } else {
-                    lastBalance = primaryHistory[primaryHistory.length - 1].balance || 0;
-                }
-            } else {
-                let admForBalance = admissions.find(a => a.status === 'approved' && (String(a.id) === String(primaryMember?.admissionId) || (a.type==='single' && String(a.id) === String(primaryMember?.admissionId))));
-                if(admForBalance) lastBalance = parseFloat(admForBalance.oldBalance || 0);
-            }
+            familyMembers.forEach(mem => {
+                let _info = computeStudentDefaulterInfo(mem, _histNowMonth, _histNowYear, _histAllMonths);
+                lastBalance += (_info.pendingBal || 0);
+            });
 
             historyHtml += `<div class="family-history-card"><div class="family-members-list">`;
             familyMembers.forEach(member => {
@@ -2504,8 +2498,8 @@
                     let latestAdm = admissionEntries[0];
                     let combinedTotalAmount = admissionEntries.reduce((sum, t) => sum + (t.totalAmount || t.total || 0), 0);
                     let combinedSubmitted = admissionEntries.reduce((sum, t) => sum + (t.submittedAmount || 0), 0);
-                    // Get ADR number for admission entry
-                    let adrNum = getNextADRNumber();
+                    // Get ADR number from stored payment history record — kabhi bhi naya generate mat karo
+                    let adrNum = admissionEntries.map(t => t.receiptNo).find(r => r) || '';
                     historyHtml += `<div style="margin-bottom:20px;">`;
                     historyHtml += `
                     <div style="background:linear-gradient(135deg,#e0e7ff,#f0fdf4);border:2px solid #667eea;border-radius:16px;padding:18px;margin-bottom:12px;">
@@ -3727,14 +3721,22 @@
                     });
                 });
             }
+            // Paid months bilkul hide karo — unhe dobara select hi na ho sake.
+            // Next unpaid month auto-highlight karo.
+            let _firstUnpaid = -1;
+            months.forEach((m, i) => { if(!_paidMonthSet.has(i) && _firstUnpaid < 0) _firstUnpaid = i; });
             let monthCheckboxes = '';
+            let _paidList = months.filter((m, i) => _paidMonthSet.has(i));
+            if(_paidList.length > 0) {
+                monthCheckboxes += `<div style="background:#d1fae5;border-radius:10px;padding:7px 12px;margin-bottom:8px;font-size:11px;color:#059669;font-weight:600;"><i class="fas fa-check-circle"></i> Pehle se paid: ${_paidList.join(', ')} — in months ki fees already jama ho chuki hai.</div>`;
+            }
             months.forEach((month, idx) => {
                 let _isPaid = _paidMonthSet.has(idx);
-                // Paid months: disabled + greyed out + green checkmark label
-                let _dis = _isPaid ? 'disabled' : '';
-                let _mark = _isPaid ? ' <span style="color:#10b981;font-size:10px;font-weight:700;">(Paid ✓)</span>' : '';
-                let _lbl = _isPaid ? 'style="opacity:0.45;cursor:not-allowed;"' : '';
-                monthCheckboxes += `<label ${_lbl}><input type="checkbox" value="${idx}" ${selectedMonths.includes(idx) && !_isPaid ? 'checked' : ''} ${_dis}> ${month}${_mark}</label>`;
+                if(_isPaid) return; // Paid months bilkul hide karo
+                let _isNext = (idx === _firstUnpaid);
+                let _preChecked = (selectedMonths.includes(idx) || _isNext) ? 'checked' : '';
+                let _nextTag = _isNext ? ' <span style="background:#667eea;color:white;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:700;">Next</span>' : '';
+                monthCheckboxes += `<label style="display:flex;align-items:center;gap:5px;${_isNext ? 'font-weight:700;color:#667eea;' : ''}"><input type="checkbox" value="${idx}" ${_preChecked} onchange=""> ${month}${_nextTag}</label>`;
             });
             document.getElementById('monthModalContent').innerHTML = monthCheckboxes;
             document.getElementById('monthModal').style.display = 'flex';
@@ -4720,8 +4722,10 @@
             // Agar koi bhi monthly payment history nahi hai (lastPaidAbs < 0) to
             // sirf admission wala balance jodo. Agar monthly payment hai, to us record mein
             // old balance pehle se include ho gaya hoga (after saveFeesData fix).
-            let pendingBal = totalOutstanding + lastEntryBalance + (lastPaidAbs < 0 ? admissionOnlyBalance : 0);
-            return { ...s, pendingBal, lastPaidMonthName, unpaidMonths, feePerMonth: tuitionFeePerMonth };
+            let _bilBalance = lastEntryBalance + (lastPaidAbs < 0 ? admissionOnlyBalance : 0);
+            let pendingBal = totalOutstanding + _bilBalance;
+            return { ...s, pendingBal, lastPaidMonthName, unpaidMonths, feePerMonth: tuitionFeePerMonth,
+                     _monthlyTotal: totalOutstanding, _billingBalance: _bilBalance };
         }
 
         function renderDefaulterList() {
@@ -4805,6 +4809,7 @@
                                     </div>
                                     <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;gap:5px;align-items:flex-end;">
                                         ${s.pendingBal > 0 ? `<div style="background:#fef2f2;color:#ef4444;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:800;">₹${s.pendingBal}</div>` : ''}
+                                        ${(s._billingBalance > 0 || s._monthlyTotal > 0) ? `<div style="font-size:9px;color:#059669;font-weight:700;line-height:1.5;text-align:right;max-width:140px;">${[s._monthlyTotal > 0 ? 'Monthly: ₹'+s._monthlyTotal : '', s._billingBalance > 0 ? 'Adm. bal: ₹'+s._billingBalance : ''].filter(Boolean).join(' + ')}</div>` : ''}
                                         <div style="display:flex;gap:5px;">
                                             <button onclick="navigateTo(renderHistoryPage,'${s.id}','${s.name}')" title="Transaction History" style="background:linear-gradient(135deg,#10b981,#059669);color:white;border:none;padding:5px 10px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;"><i class="fas fa-history"></i></button>
                                             <button onclick="printDefaulterSlip('${s.id}','${s.name}','${s.fatherName||''}','${s.contact||''}','${cls}','${s.rollNo||''}','${s.admissionNumber||''}',${s.pendingBal},'${s.unpaidMonths.join(',')}','${s.feePerMonth}')" title="Print Slip" style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;padding:5px 10px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;"><i class="fas fa-print"></i></button>
@@ -4934,8 +4939,9 @@
                     let data = computeStudentDefaulterInfo(s, nowMonth, nowYear, allMonthNames);
                     if(data.pendingBal <= 0) return; // sirf jinka sach mein balance baaki hai
                     let groupKey = (s.type === 'family' && s.familyId !== undefined) ? ('fam_' + s.familyId) : ('single_' + s.id);
+                    let _gAdmId = (s.type === 'family' && s.familyId !== undefined) ? s.familyId : s.id;
                     if(!groups[groupKey]) {
-                        groups[groupKey] = { members: [], classes: new Set(), combinedBal: 0, unpaidMonthsSet: new Set(), lastPaidMonthName: null, lastPaidIdx: -1, contact: s.contact, fatherName: s.fatherName, familyName: s.familyName, admissionNumbers: [] };
+                        groups[groupKey] = { members: [], classes: new Set(), combinedBal: 0, unpaidMonthsSet: new Set(), lastPaidMonthName: null, lastPaidIdx: -1, contact: s.contact, fatherName: s.fatherName, familyName: s.familyName, admissionNumbers: [], admId: _gAdmId };
                     }
                     let g = groups[groupKey];
                     g.members.push({ name: s.name, className: s.className, rollNo: s.rollNo, pendingBal: data.pendingBal, admissionNumber: s.admissionNumber });
@@ -4983,9 +4989,10 @@
                                         ${unpaidBadges}
                                     </div>
                                 </div>
-                                <div style="text-align:right;flex-shrink:0;">
+                                <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
                                     <div style="background:#fef2f2;color:#ef4444;padding:6px 14px;border-radius:20px;font-size:14px;font-weight:800;">₹${g.combinedBal}</div>
-                                    <div style="font-size:10px;color:#888;margin-top:4px;">Total Balance</div>
+                                    <div style="font-size:10px;color:#888;">Total Balance</div>
+                                    <button onclick="renderShowBillPage('${g.admId}')" style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;padding:6px 14px;border-radius:16px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;"><i class='fas fa-file-invoice'></i> Show Bill</button>
                                 </div>
                             </div>
                         </div>`;
@@ -5638,8 +5645,43 @@
                 ? [{ name: admission.name, cls: admission.newClass }]
                 : (admission.students||[]).map(s => ({ name: s.name, cls: s.class||'' }));
             let monthShorts = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            // Build paid-months set for each student so already-billed months are hidden
+            let _bilPaidMonthsPerStudent = {};
+            let _bilShortMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            admStudents.forEach((st, si) => {
+                let sid2;
+                if(admission.type === 'single') {
+                    sid2 = String(admission.id);
+                } else {
+                    // Family: try to match by name from admission.students
+                    let admStu = (admission.students||[]).find(s => s.name === st.name);
+                    sid2 = admStu ? String(admission.id + '_' + admStu.id) : null;
+                }
+                let _paid = new Set();
+                if(sid2 && paymentHistory[sid2]) {
+                    paymentHistory[sid2].forEach(entry => {
+                        (entry.months || []).forEach(mo => {
+                            // Long name (January) ya short name (Jan) dono check karo
+                            let moIdx = _bilShortMonths.indexOf(mo);
+                            if(moIdx < 0) {
+                                let _full = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                                moIdx = _full.indexOf(mo);
+                                if(moIdx >= 0) mo = _bilShortMonths[moIdx];
+                            }
+                            if(mo) _paid.add(mo);
+                        });
+                    });
+                }
+                _bilPaidMonthsPerStudent[si] = _paid;
+            });
+
             let perStudentCalcHtml = admStudents.map((st, si) => {
                 let autoFee = classFeesStructure[st.cls]?.tuitionFees || 0;
+                let _paidSet2 = _bilPaidMonthsPerStudent[si] || new Set();
+                let _paidListBil = monthShorts.filter(m => _paidSet2.has(m));
+                let _firstUnpaidBil = monthShorts.findIndex(m => !_paidSet2.has(m));
+                let _paidNoticeBil = _paidListBil.length > 0
+                    ? `<div style="background:#d1fae5;border-radius:8px;padding:5px 10px;margin-bottom:8px;font-size:10px;color:#059669;font-weight:600;"><i class="fas fa-check-circle"></i> Pehle se billed: ${_paidListBil.join(', ')}</div>` : '';
                 return `<div style="background:white;border-radius:12px;border:1.5px solid #c7d2fe;padding:12px 14px;margin-bottom:10px;">
                     <div style="font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:7px;"><i class="fas fa-user" style="color:#667eea;margin-right:5px;"></i>${st.name} <span style="background:#e0e7ff;color:#667eea;padding:1px 8px;border-radius:10px;font-size:11px;">${st.cls}</span></div>
                     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
@@ -5647,11 +5689,16 @@
                         <input type="number" class="monthly-fee-amt" data-sidx="${si}" data-student="${st.name}" data-cls="${st.cls}" value="${autoFee}" readonly title="Fees Structure se automatic liya gaya hai" style="width:100px;padding:6px 10px;border:2px solid #c7d2fe;border-radius:10px;font-size:14px;background:#f3f4ff;color:#4338ca;font-weight:700;cursor:not-allowed;">
                         <span style="font-size:11px;color:#999;"><i class="fas fa-lock"></i> Fees Structure se auto</span>
                     </div>
+                    ${_paidNoticeBil}
                     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
                         ${monthShorts.map((m,mi)=>{
+                            let _isPaidBil = _paidSet2.has(m);
+                            if(_isPaidBil) return ''; // Paid months hide karo
                             let examFeeForThisMonth = getExamFeeForMonth(st.cls, mi);
                             let examTag = examFeeForThisMonth > 0 ? ` <span style="color:#b45309;">(+₹${examFeeForThisMonth} exam)</span>` : '';
-                            return `<label style="display:flex;align-items:center;gap:3px;background:#f8faff;padding:4px 8px;border-radius:14px;border:1px solid #c7d2fe;cursor:pointer;font-size:11px;font-weight:500;" title="${m}${examFeeForThisMonth>0?' - Exam Fee ₹'+examFeeForThisMonth+' applicable':''}"><input type="checkbox" class="monthly-fee-month-s${si}" value="${m}" data-monthidx="${mi}" onchange="window.calcMonthlyTotalFor&&window.calcMonthlyTotalFor(${si})" style="accent-color:#667eea;width:12px;height:12px;"> ${m}${examTag}</label>`;
+                            let _isNextBil = (mi === _firstUnpaidBil);
+                            let _nextTagBil = _isNextBil ? ` <span style="background:#667eea;color:white;padding:1px 5px;border-radius:5px;font-size:9px;font-weight:700;">Next</span>` : '';
+                            return `<label style="display:flex;align-items:center;gap:3px;background:${_isNextBil?'#eef2ff':'#f8faff'};padding:4px 8px;border-radius:14px;border:${_isNextBil?'2px solid #667eea':'1px solid #c7d2fe'};cursor:pointer;font-size:11px;font-weight:${_isNextBil?'700':'500'};" title="${m}${examFeeForThisMonth>0?' - Exam Fee ₹'+examFeeForThisMonth+' applicable':''}"><input type="checkbox" class="monthly-fee-month-s${si}" value="${m}" data-monthidx="${mi}" onchange="window.calcMonthlyTotalFor&&window.calcMonthlyTotalFor(${si})" style="accent-color:#667eea;width:12px;height:12px;"> ${m}${examTag}${_nextTagBil}</label>`;
                         }).join('')}
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -6206,17 +6253,46 @@
                             }
                         });
                         let totalRowsSum = Object.values(perStudent).reduce((s,p)=>s+p.total,0) + unassignedTotal;
-                        // Discount/extra charges group-level hote hain, isliye final bill
-                        // total ko har student ke share ke hisaab se proportionally baanto.
-                        Object.keys(perStudent).forEach(sid => {
+                        // Family billing: Agar koi bhi item kisi student ke naam se directly assign nahi hua
+                        // (jaise books/belt/dress — inke naam student prefix ke bina likhe hain) to billing
+                        // balance sabhi students mein equally distribute karo. Proportional tab use hoga jab
+                        // student-specific tuition fee rows billing mein hon.
+                        // IMPORTANT: Har student ko entry zaroor deni hai — agar entry na ho to Defaulter
+                        // List aur Transaction History mein billing balance dikhta hi nahi.
+                        let memberSids = Object.keys(perStudent);
+                        let memberCount = memberSids.length || 1;
+                        let _assignedTotal = 0, _assignedSubmitted = 0;
+                        memberSids.forEach((sid, idx) => {
                             let p = perStudent[sid];
-                            if(p.total === 0 && p.months.length === 0) return; // is student ka is bill mein kuch nahi tha
-                            let shareTotal = totalRowsSum > 0 ? Math.round((p.total / totalRowsSum) * finalTotalRaw) : 0;
-                            let shareSubmitted = totalRowsSum > 0 ? Math.round((p.total / totalRowsSum) * submittedRaw) : 0;
+                            let shareTotal, shareSubmitted;
+                            if(totalRowsSum > 0 && p.total > 0) {
+                                // Proportional: is student ke specific items / total items
+                                shareTotal = Math.round((p.total / totalRowsSum) * finalTotalRaw);
+                                shareSubmitted = Math.round((p.total / totalRowsSum) * submittedRaw);
+                            } else if(totalRowsSum > 0 && p.total === 0) {
+                                // Koi specific item nahi is student ke liye — unassigned total ka equal share
+                                let unassignedFinalShare = Math.round((unassignedTotal / totalRowsSum) * finalTotalRaw);
+                                let unassignedSubmittedShare = Math.round((unassignedTotal / totalRowsSum) * submittedRaw);
+                                shareTotal = Math.round(unassignedFinalShare / memberCount);
+                                shareSubmitted = Math.round(unassignedSubmittedShare / memberCount);
+                            } else {
+                                // Koi bhi item kisi student ko assign nahi hua — equal split
+                                if(idx < memberCount - 1) {
+                                    shareTotal = Math.round(finalTotalRaw / memberCount);
+                                    shareSubmitted = Math.round(submittedRaw / memberCount);
+                                } else {
+                                    // Last student: remaining amount (rounding error absorb karo)
+                                    shareTotal = Math.max(0, finalTotalRaw - _assignedTotal);
+                                    shareSubmitted = Math.max(0, submittedRaw - _assignedSubmitted);
+                                }
+                            }
+                            _assignedTotal += shareTotal;
+                            _assignedSubmitted += shareSubmitted;
+                            let shareBalance = Math.max(0, shareTotal - shareSubmitted);
                             if(!paymentHistory[sid]) paymentHistory[sid] = [];
                             paymentHistory[sid].push({
                                 date: new Date().toLocaleString(), isAdmissionEntry: true, contact: admission.contact || '',
-                                totalAmount: shareTotal, submittedAmount: shareSubmitted, balance: Math.max(0, shareTotal - shareSubmitted),
+                                totalAmount: shareTotal, submittedAmount: shareSubmitted, balance: shareBalance,
                                 months: p.months, fees: {}, amount: shareSubmitted, memberTotal: shareTotal,
                                 oldBalance: 0, remark: 'Admission Entry', receiptNo: adrNumber,
                                 modeOfPayment: bilMop, timestamp: Date.now()
@@ -6228,7 +6304,9 @@
 
                 // Create Day Book income/expense entry for this admission billing
                 {
-                    let admName = admission.type === 'single' ? (admission.name || 'Admission') : (admission.familyName || 'Family Admission');
+                    let admName = admission.type === 'single'
+                        ? (admission.name || 'Admission')
+                        : ((admission.familyName || '') + (admission.students && admission.students.length > 0 ? ' (' + admission.students.map(s=>s.name).join(', ') + ')' : '') || 'Family Admission');
                     let entryType = (bilMop === 'No Payment') ? 'expense' : 'income';
                     let nowEntry = new Date();
                     let bilQPEntry = {
@@ -6300,7 +6378,7 @@
                 let adrNumber = '';
                 let savedData = billingSaved[admId];
                 if(savedData && savedData.adrNumber) adrNumber = savedData.adrNumber;
-                if(!adrNumber) adrNumber = getNextADRNumber();
+                if(!adrNumber) adrNumber = peekNextADRNumber(); // peek only — save nahi hua to increment mat karo
 
                 let bRow = function(label, val, bold, color){
                     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #eee;">'
@@ -6334,6 +6412,234 @@
                 if(typeof calculateGrandTotalBilling !== 'undefined') calculateGrandTotalBilling();
                 else if(window.calculateGrandTotalBilling) window.calculateGrandTotalBilling();
             }, 80);
+        }
+
+
+        // ==================== SHOW BILL PAGE ====================
+        function renderShowBillPage(admId) {
+            admId = String(admId);
+            let admission = admissions.find(a => String(a.id) === admId && a.status === 'approved');
+            if(!admission) { showPopup('Admission not found!', false); return; }
+
+            let savedBil = (typeof billingSaved === 'object' && !Array.isArray(billingSaved)) ? billingSaved[admId] : null;
+            let allStudentsList = getAllStudents();
+
+            // Sabhi members collect karo
+            let members = [];
+            if(admission.type === 'single') {
+                let s = allStudentsList.find(s => String(s.id) === admId);
+                if(s) members.push(s);
+            } else {
+                members = allStudentsList.filter(s => s.familyId !== undefined && String(s.familyId) === admId);
+            }
+
+            // Free student identification helper
+            let shortMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+            // Build student details table
+            let stuTableRows = members.map((m, idx) => {
+                let sid = String(m.id);
+                let freeType = getStudentFreeType(sid);
+                let freeBadge = freeType ? `<span style="background:#f59e0b;color:white;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${getFreeTypeBadge(freeType)}</span>` : `<span style="background:#10b981;color:white;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">Paying</span>`;
+                let admNum = m.admissionNumber || '—';
+                let paidMos = [];
+                (paymentHistory[sid]||[]).forEach(h => {
+                    if(h.months) h.months.forEach(mo => { if(!paidMos.includes(mo)) paidMos.push(mo); });
+                });
+                return `<tr style="background:${idx%2===0?'#f8faff':'white'};">
+                    <td style="padding:10px 12px;font-weight:700;">${m.name}</td>
+                    <td style="padding:10px 12px;">${m.className}</td>
+                    <td style="padding:10px 12px;">${admNum}</td>
+                    <td style="padding:10px 12px;">${freeBadge}</td>
+                    <td style="padding:10px 12px;">${paidMos.length > 0 ? paidMos.map(mo=>`<span style="background:#d1fae5;color:#059669;padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;">${mo}</span>`).join(' ') : '—'}</td>
+                </tr>`;
+            }).join('');
+
+            // Build billing rows table
+            let bilRowsHtml = '';
+            let adrNum = '';
+            if(savedBil) {
+                adrNum = savedBil.adrNumber || '';
+                let rows = savedBil.rows || [];
+                bilRowsHtml = rows.map((row, i) => `<tr style="background:${i%2===0?'#f9f9f9':'white'};">
+                    <td style="padding:8px 10px;">${row.name||''}</td>
+                    <td style="padding:8px 10px;text-align:right;">₹${row.price||0}</td>
+                    <td style="padding:8px 10px;text-align:center;">${row.qty||1}</td>
+                    <td style="padding:8px 10px;text-align:right;font-weight:700;">${row.total||'₹0'}</td>
+                </tr>`).join('');
+            } else {
+                // No billing saved yet
+                bilRowsHtml = `<tr><td colspan="4" style="padding:20px;text-align:center;color:#999;"><i class="fas fa-info-circle"></i> Koi billing saved nahi hai abhi tak.</td></tr>`;
+            }
+
+            // Summary values
+            let grandTotal = savedBil ? (savedBil.grandTotal||'₹0') : '₹0';
+            let discount   = savedBil ? (savedBil.discount||0) : 0;
+            let finalTotal = savedBil ? (savedBil.finalTotal||'₹0') : '₹0';
+            let submitted  = savedBil ? (savedBil.submitted||0) : 0;
+            let balance    = savedBil ? (savedBil.balance||'₹0') : '₹0';
+            let savedAt    = savedBil ? (savedBil.savedAt||'') : '';
+            let mop        = savedBil ? (savedBil.modeOfPayment||'—') : '—';
+            let familyName = admission.familyName || admission.name || 'Admission';
+            let contact    = admission.contact || '—';
+            let fatherName = admission.fatherName || '—';
+
+            // Build advance check
+            let balRaw = parseFloat((balance||'0').toString().replace('₹','')) || 0;
+            let subRaw = parseFloat(submitted) || 0;
+            let finRaw = parseFloat((finalTotal||'0').toString().replace('₹','')) || 0;
+            let isAdvance = subRaw > finRaw;
+            let advanceAmt = isAdvance ? (subRaw - finRaw) : 0;
+
+            document.getElementById('app').innerHTML = `<div class="inner-bg">
+                <div class="sticky-header">${getHeader('Show Bill', true)}</div>
+                <div class="inner-container">
+                <div class="form-card">
+                    <div class="form-title"><i class="fas fa-file-invoice" style="color:#667eea;"></i> Admission Bill — ${familyName}</div>
+
+                    ${adrNum ? `<div style="text-align:right;margin-bottom:10px;"><span style="background:#dc2626;color:white;padding:4px 14px;border-radius:14px;font-size:12px;font-weight:700;"><i class="fas fa-receipt"></i> ${adrNum}</span></div>` : ''}
+
+                    <!-- Header Info -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;margin-bottom:16px;background:#f1f5ff;border-radius:12px;padding:12px 16px;">
+                        <div><i class="fas fa-users" style="color:#667eea;width:16px;"></i> <strong>Family / Name:</strong> ${familyName}</div>
+                        <div><i class="fas fa-phone" style="color:#10b981;width:16px;"></i> <strong>Contact:</strong> ${contact}</div>
+                        <div><i class="fas fa-user-tie" style="color:#667eea;width:16px;"></i> <strong>Father Name:</strong> ${fatherName}</div>
+                        ${savedAt ? `<div><i class="fas fa-calendar-check" style="color:#667eea;width:16px;"></i> <strong>Bill Date:</strong> ${savedAt}</div>` : ''}
+                    </div>
+
+                    <!-- Students Table -->
+                    <div style="font-weight:700;font-size:13px;color:#667eea;margin-bottom:8px;"><i class="fas fa-child"></i> Students Detail</div>
+                    <div style="overflow-x:auto;margin-bottom:16px;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                        <thead><tr style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;">
+                            <th style="padding:10px;text-align:left;">Name</th>
+                            <th style="padding:10px;text-align:left;">Class</th>
+                            <th style="padding:10px;text-align:left;">Adm. No.</th>
+                            <th style="padding:10px;text-align:left;">Fee Status</th>
+                            <th style="padding:10px;text-align:left;">Paid Months</th>
+                        </tr></thead>
+                        <tbody>${stuTableRows}</tbody>
+                    </table>
+                    </div>
+
+                    <!-- Billing Items -->
+                    <div style="font-weight:700;font-size:13px;color:#667eea;margin-bottom:8px;"><i class="fas fa-list"></i> Billing Items</div>
+                    <div style="overflow-x:auto;margin-bottom:16px;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                        <thead><tr style="background:#1a1a2e;color:white;">
+                            <th style="padding:9px 10px;text-align:left;">Item</th>
+                            <th style="padding:9px 10px;text-align:right;">Price</th>
+                            <th style="padding:9px 10px;text-align:center;">Qty</th>
+                            <th style="padding:9px 10px;text-align:right;">Total</th>
+                        </tr></thead>
+                        <tbody>${bilRowsHtml}</tbody>
+                    </table>
+                    </div>
+
+                    <!-- Summary Box -->
+                    <div style="background:#f8f9fa;border-radius:14px;padding:14px 18px;margin-bottom:18px;">
+                        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e0e0e0;font-size:14px;">
+                            <span style="font-weight:600;">Grand Total</span><span style="font-weight:700;color:#1a1a2e;">${grandTotal}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e0e0e0;font-size:14px;">
+                            <span style="font-weight:600;">Discount</span><span style="color:#f59e0b;font-weight:700;">₹${discount}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e0e0e0;font-size:15px;">
+                            <span style="font-weight:700;">Total Amount</span><span style="font-weight:800;color:#10b981;">${finalTotal}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e0e0e0;font-size:14px;">
+                            <span style="font-weight:600;">Submitted</span><span style="font-weight:700;color:#10b981;">₹${submitted}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #e0e0e0;font-size:14px;">
+                            <span style="font-weight:600;">Mode of Payment</span><span style="font-weight:600;color:#555;">${mop}</span>
+                        </div>
+                        ${!isAdvance ? `<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:16px;">
+                            <span style="font-weight:700;color:#dc2626;">Balance Due</span><span style="font-weight:800;color:#dc2626;">${balance}</span>
+                        </div>` : `<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:16px;">
+                            <span style="font-weight:700;color:#10b981;">Advance Paid</span><span style="font-weight:800;color:#10b981;">₹${advanceAmt}</span>
+                        </div>`}
+                    </div>
+
+                    <!-- Print Button -->
+                    <div style="display:flex;justify-content:flex-end;">
+                        <button onclick="window._printShowBill('${admId}')" style="background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;padding:12px 24px;border-radius:24px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;">
+                            <i class="fas fa-print"></i> Print Bill
+                        </button>
+                    </div>
+                </div>
+                </div>${getOverlay()}</div>`;
+
+            // Print function
+            window._printShowBill = function(pid) {
+                let padm = admissions.find(a => String(a.id) === String(pid) && a.status === 'approved');
+                let pbil = (typeof billingSaved === 'object' && !Array.isArray(billingSaved)) ? billingSaved[String(pid)] : null;
+                if(!padm) return;
+                let ps = printSettings;
+                let bf = ps.billingFields || {};
+                let pfamilyName = padm.familyName || padm.name || '';
+                let pcontact = padm.contact || '—';
+                let pfatherName = padm.fatherName || '—';
+                let padrNum = pbil ? (pbil.adrNumber||'') : '';
+                let pgrandTotal = pbil ? (pbil.grandTotal||'₹0') : '₹0';
+                let pdiscount = pbil ? (pbil.discount||0) : 0;
+                let pfinalTotal = pbil ? (pbil.finalTotal||'₹0') : '₹0';
+                let psubmitted = pbil ? (pbil.submitted||0) : 0;
+                let pbalance = pbil ? (pbil.balance||'₹0') : '₹0';
+                let pmop = pbil ? (pbil.modeOfPayment||'—') : '—';
+                let prows = pbil ? (pbil.rows||[]) : [];
+                let pallStu = getAllStudents();
+                let pmembers = padm.type === 'single'
+                    ? pallStu.filter(s => String(s.id) === String(pid))
+                    : pallStu.filter(s => s.familyId !== undefined && String(s.familyId) === String(pid));
+
+                let stuRows = pmembers.map(m => {
+                    let sid2 = String(m.id);
+                    let ft2 = getStudentFreeType(sid2);
+                    let fb2 = ft2 ? getFreeTypeBadge(ft2) : 'Paying';
+                    return '<tr><td style="padding:5px 8px;border:1px solid #ddd;">'+m.name+'</td>'
+                        +'<td style="padding:5px 8px;border:1px solid #ddd;">'+m.className+'</td>'
+                        +'<td style="padding:5px 8px;border:1px solid #ddd;">'+(m.admissionNumber||'—')+'</td>'
+                        +'<td style="padding:5px 8px;border:1px solid #ddd;">'+fb2+'</td></tr>';
+                }).join('');
+
+                let bilRows = prows.map(r => '<tr><td style="padding:5px 8px;border:1px solid #ddd;">'+r.name+'</td>'
+                    +'<td style="padding:5px 8px;border:1px solid #ddd;text-align:right;">₹'+r.price+'</td>'
+                    +'<td style="padding:5px 8px;border:1px solid #ddd;text-align:center;">'+r.qty+'</td>'
+                    +'<td style="padding:5px 8px;border:1px solid #ddd;text-align:right;">'+r.total+'</td></tr>').join('');
+
+                let bRow2 = (l,v,bold,col) => '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #eee;">'
+                    +'<span style="font-size:12px;">'+l+'</span>'
+                    +'<span style="font-size:12px;font-weight:'+(bold?'700':'500')+';color:'+(col||'inherit')+';">'+v+'</span></div>';
+
+                let body = '<div style="margin:10mm;">'
+                    + buildPrintHeader()
+                    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+                    + '<span style="font-size:14px;font-weight:800;">Admission Billing Summary</span>'
+                    + (padrNum ? '<span style="font-size:11px;font-weight:700;color:#dc2626;">Receipt: '+padrNum+'</span>' : '<span></span>')
+                    + '</div>'
+                    + '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px;"><tbody>'
+                    + '<tr><td style="padding:4px 8px;width:35%;font-weight:600;color:#555;">Family / Name</td><td style="padding:4px 8px;">'+pfamilyName+'</td>'
+                    + '<td style="padding:4px 8px;font-weight:600;color:#555;">Father</td><td style="padding:4px 8px;">'+pfatherName+'</td></tr>'
+                    + '<tr><td style="padding:4px 8px;font-weight:600;color:#555;">Contact</td><td colspan="3" style="padding:4px 8px;">'+pcontact+'</td></tr>'
+                    + '</tbody></table>'
+                    + '<div style="font-weight:700;font-size:11px;color:#667eea;margin:6px 0 4px;">Students:</div>'
+                    + '<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px;">'
+                    + '<thead><tr style="background:#667eea;color:white;"><th style="padding:5px 8px;text-align:left;">Name</th><th style="padding:5px 8px;">Class</th><th style="padding:5px 8px;">Adm. No.</th><th style="padding:5px 8px;">Status</th></tr></thead>'
+                    + '<tbody>'+stuRows+'</tbody></table>'
+                    + '<div style="font-weight:700;font-size:11px;color:#1a1a2e;margin:6px 0 4px;">Billing Items:</div>'
+                    + '<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px;">'
+                    + '<thead><tr style="background:#1a1a2e;color:white;"><th style="padding:5px 8px;text-align:left;">Item</th><th style="padding:5px 8px;text-align:right;">Price</th><th style="padding:5px 8px;text-align:center;">Qty</th><th style="padding:5px 8px;text-align:right;">Total</th></tr></thead>'
+                    + '<tbody>'+bilRows+'</tbody></table>'
+                    + '<div style="margin-top:8px;border-top:2px solid #667eea;padding-top:8px;">'
+                    + (bf.grandTotal!==false     ? bRow2('Grand Total',pgrandTotal) : '')
+                    + (bf.discount!==false       ? bRow2('Discount','₹'+pdiscount) : '')
+                    + (bf.totalAmount!==false    ? bRow2('Total Amount',pfinalTotal,true,'#059669') : '')
+                    + (bf.submittedAmount!==false? bRow2('Submitted','₹'+psubmitted) : '')
+                    + (bf.balance!==false        ? bRow2('Balance',pbalance,true,'#dc2626') : '')
+                    + bRow2('Mode of Payment',pmop)
+                    + '</div></div>';
+                doPrint(body);
+            };
         }
 
         // ==================== ADMISSION SETTINGS ====================
